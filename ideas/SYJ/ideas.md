@@ -12,4 +12,3 @@
 <h4>대안 : 물체의 표면적을 계산하여 공기밀도(비례상수 k)를 설정하였을 떄<br>표면적에 맞는 공기입자의 양을 산정하고 이의 반발력을 측정하여 g에서 빼준다(g는 9.8로 가정한다)-> 30fps로 하여 프레임단위로 계산한다.(g=9.8m/s, 1frame 당 가속도는 9.8m/30s)이다.</h4>
 How to download Solidedge(if you want to use the CAD program)
 <input type="<img width="1732" height="877" alt="image" src="https://github.com/user-attachments/assets/0799af92-00a8-4b6c-8c27-327a9956fd0f" />
-" accept="image/*">
