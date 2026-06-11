@@ -4,7 +4,7 @@
 <h3>what to do</h3>
 invite 최은우 in this project<br>
 discussions->please vote for programming language<br>
-<img src="https://ibb.co/w2Zcwp2" alt="how to find Discussions session" width="300">
+[IMG-0470.jpg](https://postimg.cc/R31WD2qs)
 fast link : https://github.com/rohaoh/sp202606/discussions/2<br>
 <h3>information</h3>
 code run in https://replit.com<br>
