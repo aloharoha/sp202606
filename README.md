@@ -6,4 +6,4 @@ invite 최은우 in this project
 ...
 
 <h3>information</h3>
-code run in [replit]https://replit.com
+code run in https://replit.com
