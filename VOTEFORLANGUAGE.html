@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>간단한 투표</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .vote-item { margin-bottom: 15px; }
+        button { padding: 5px 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h2>📊 원하는 항목에 투표해줘! (중복 가능)</h2>
+
+    <div class="vote-item">
+        <span>옵션 A </span>
+        <button onclick="vote('countA')">✔️ 체크</button>
+        <span id="countA">0</span>표
+    </div>
+
+    <div class="vote-item">
+        <span>옵션 B </span>
+        <button onclick="vote('countB')">✔️ 체크</button>
+        <span id="countB">0</span>표
+    </div>
+
+    <script>
+        function vote(id) {
+            let countElement = document.getElementById(id);
+            let currentCount = parseInt(countElement.innerText);
+            countElement.innerText = currentCount + 1;
+        }
+    </script>
+
+</body>
+</html>
