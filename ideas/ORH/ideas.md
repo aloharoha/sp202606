@@ -8,3 +8,5 @@ c++으로 할시
 
 ### 참고하기  
 ![HELP_FOR_FORMULA](./HELP_FOR_FORMULA.jpeg)⁠
+
+종단 속도 공식:![수식](https://latex.codecogs.com/svg.image?v_t = \sqrt{\frac{2mg}{\rho A C_d}})
