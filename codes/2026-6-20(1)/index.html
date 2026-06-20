@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+<title>Physics Simulator</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --panel: #161b22;
+  --border: #21262d;
+  --accent: #238636;
+  --accent2: #f0a500;
+  --blue: #1f6feb;
+  --text: #c9d1d9;
+  --muted: #6e7681;
+  --input-bg: #0d1117;
+  --radius: 6px;
+  --mono: 'Consolas', 'Menlo', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+/* TOP METRIC CARDS */
+.metric-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+.metric-card {
+  padding: 14px 18px;
+  border-right: 1px solid var(--border);
+}
+.metric-card:last-child { border-right: none; }
+.metric-card .card-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.metric-card .card-label .dot {
+  width: 18px; height: 2px; border-radius: 2px;
+}
+.dot-blue   { background: #58a6ff; }
+.dot-red    { background: #f85149; }
+.dot-green  { background: #3fb950; }
+.dot-yellow { background: #f0a500; }
+
+.metric-card .card-val {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+.metric-card .card-unit {
+  font-size: 11px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+/* TOOLBAR */
+.toolbar {
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.toolbar-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-right: auto;
+}
+.btn-icon {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  width: 28px; height: 28px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  transition: background .15s, border-color .15s;
+}
+.btn-icon:hover { background: var(--border); }
+.btn-run {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.btn-run:hover { opacity: 0.85; }
+.btn-run:disabled { opacity: 0.4; cursor: not-allowed; }
+.time-display {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* WORKSPACE */
+.workspace {
+  display: grid;
+  grid-template-columns: 220px 1fr 320px;
+  overflow: hidden;
+}
+
+/* LEFT PANEL */
+.left-panel {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 14px 12px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+.field { margin-bottom: 10px; }
+.field label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.field label span { color: var(--accent2); font-family: var(--mono); }
+.field input[type=number], .field select {
+  width: 100%;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: var(--mono);
+  outline: none;
+  transition: border-color .2s;
+}
+.field input:focus, .field select:focus { border-color: var(--blue); }
+
+.terminal-vel-box {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+.terminal-vel-box .tv-val {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent2);
+}
+
+.stl-btn {
+  width: 100%;
+  background: none;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+  border-radius: var(--radius);
+  padding: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color .2s, color .2s;
+}
+.stl-btn:hover { border-color: var(--blue); color: var(--text); }
+
+/* CENTER 3D */
+#canvas-wrap {
+  position: relative;
+  background: radial-gradient(ellipse at 50% 80%, #0f1d35 0%, #0d1117 70%);
+  overflow: hidden;
+}
+#canvas-wrap canvas { display: block; }
+
+.height-bar-wrap {
+  position: absolute;
+  right: 10px; top: 10px; bottom: 10px;
+  width: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.height-bar-track {
+  flex: 1;
+  width: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+}
+.height-bar-fill {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  background: var(--blue);
+  border-radius: 3px;
+  transition: height .1s;
+}
+.height-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  writing-mode: vertical-rl;
+}
+
+/* RIGHT PANEL */
+.right-panel {
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  flex: 1;
+  padding: 9px 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+.tab.active { color: var(--text); border-bottom-color: var(--blue); }
+.tab:hover:not(.active) { color: var(--text); }
+
+.chart-area {
+  flex: 1;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+.chart-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+  gap: 8px;
+}
+.chart-placeholder svg { opacity: 0.3; }
+
+#graph-canvas {
+  width: 100%;
+  flex: 1;
+  display: block;
+  border-radius: var(--radius);
+}
+.graph-legend {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.legend-dot {
+  width: 20px; height: 2px; border-radius: 2px;
+}
+</style>
+</head>
+<body>
+
+<div class="metric-bar">
+  <div class="metric-card">
+    <div class="card-label"><span class="dot dot-blue"></span>Terminal Velocity (Theory)</div>
+    <div><span class="card-val" id="m-vt">—</span><span class="card-unit">m/s</span></div>
+  </div>
+  <div class="metric-card">
+    <div class="card-label"><span class="dot dot-red"></span>Impact Velocity</div>
+    <div><span class="card-val" id="m-vi">—</span><span class="card-unit">m/s</span></div>
+  </div>
+  <div class="metric-card">
+    <div class="card-label"><span class="dot dot-green"></span>Fall Time</div>
+    <div><span class="card-val" id="m-ft">—</span><span class="card-unit">s</span></div>
+  </div>
+  <div class="metric-card">
+    <div class="card-label"><span class="dot dot-yellow"></span>Time to Terminal Vel.</div>
+    <div><span class="card-val" id="m-tt">—</span><span class="card-unit">s</span></div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <span class="toolbar-title">3D Preview</span>
+  <button class="btn-icon" id="btn-play" title="Play">▶</button>
+  <button class="btn-icon" id="btn-stop" title="Stop">⏹</button>
+  <button class="btn-icon" id="btn-reset" title="Reset">↺</button>
+  <span class="time-display">t = <span id="t-display">0.000</span> s</span>
+  <button class="btn-run" id="btn-run">Run Simulation</button>
+</div>
+
+<div class="workspace">
+  <div class="left-panel">
+    <div>
+      <div class="section-title">Object Shape</div>
+      <div class="field">
+        <label>Shape</label>
+        <select id="sel-shape">
+          <option value="sphere">Sphere</option>
+          <option value="cylinder">Cylinder</option>
+          <option value="box">Box</option>
+          <option value="cone">Cone</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Properties</div>
+      <div class="field">
+        <label>Mass <span>kg</span></label>
+        <input type="number" id="inp-mass" value="1" min="0.01" step="0.1">
+      </div>
+      <div class="field">
+        <label>Cross-sectional Area <span>m²</span></label>
+        <input type="number" id="inp-area" value="0.01" min="0.0001" step="0.001">
+      </div>
+      <div class="field">
+        <label>Drag Coefficient Cd <span id="cd-label">—</span></label>
+        <input type="number" id="inp-cd" value="0.47" min="0.01" step="0.01">
+      </div>
+      <div class="terminal-vel-box">
+        Terminal velocity = <span class="tv-val" id="tv-live">—</span> m/s
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Initial Conditions</div>
+      <div class="field">
+        <label>Initial Height <span>m</span></label>
+        <input type="number" id="inp-height" value="500" min="1" step="10">
+      </div>
+      <div class="field">
+        <label>Initial Velocity (↑+) <span>m/s</span></label>
+        <input type="number" id="inp-v0" value="0" step="1">
+      </div>
+      <div class="field">
+        <label>Gravity <span>m/s²</span></label>
+        <input type="number" id="inp-g" value="9.81" min="0.1" step="0.01">
+      </div>
+      <div class="field">
+        <label>Air Density <span>kg/m³</span></label>
+        <input type="number" id="inp-rho" value="1.225" min="0" step="0.001">
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">3D Model</div>
+      <button class="stl-btn" id="btn-stl">⬆ Load STL File</button>
+      <input type="file" id="file-stl" accept=".stl,.glb" style="display:none">
+    </div>
+  </div>
+
+  <div id="canvas-wrap">
+    <div class="height-bar-wrap">
+      <div class="height-bar-track">
+        <div class="height-bar-fill" id="h-bar" style="height:100%"></div>
+      </div>
+      <span class="height-label">m</span>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="tab-bar">
+      <div class="tab active" data-tab="velocity">Velocity</div>
+      <div class="tab" data-tab="height">Height</div>
+      <div class="tab" data-tab="acceleration">Acceleration</div>
+    </div>
+    <div class="chart-area">
+      <div class="chart-placeholder" id="chart-placeholder">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="2" y="2" width="20" height="20" rx="2"/>
+          <path d="M7 17l4-6 3 4 2-3 2 2"/>
+        </svg>
+        Run the simulation to see charts
+      </div>
+      <canvas id="graph-canvas" style="display:none"></canvas>
+      <div class="graph-legend" id="graph-legend" style="display:none"></div>
+    </div>
+  </div>
+</div>
+
+<script src="renderer.js"></script>
+</body>
+</html>
