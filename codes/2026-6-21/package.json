@@ -1,0 +1,37 @@
+{
+  "name": "physics-simulator",
+  "version": "1.0.0",
+  "description": "낙하 물체 물리 시뮬레이터",
+  "main": "main.js",
+  "scripts": {
+    "build-addon": "node-gyp rebuild",
+    "start": "electron .",
+    "dist": "electron-builder --win --x64"
+  },
+  "dependencies": {
+    "node-addon-api": "^7.0.0",
+    "three": "^0.165.0"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.physics.simulator",
+    "productName": "물리 시뮬레이터",
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/.cache"
+    ],
+    "extraResources": [
+      {
+        "from": "build/Release/physics.node",
+        "to": "physics.node"
+      }
+    ]
+  }
+}
