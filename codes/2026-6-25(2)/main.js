@@ -1,49 +1,53 @@
-const { app, BrowserWindow, ipcMain, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 
-// ── 커스텀 앱 프로토콜 (app://) ──
-// 패키지된 앱을 file:// 로 로드하면 중첩 import 가 있는 ES 모듈(GLTFLoader 등)을
-// Chromium 이 동적 import 하지 못해 "Failed to fetch dynamically imported module" 가 난다.
-// standard + secure 커스텀 프로토콜로 로드하면 http 처럼 동작해 ESM 모듈 그래프가 정상 로드된다.
-const APP_SCHEME = 'app';
-protocol.registerSchemesAsPrivileged([{
-    scheme: APP_SCHEME,
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
-}]);
-
+// ── 로컬 HTTP 서버 ──
+// packaged 앱에서 file:// / 커스텀 프로토콜로 로드하면 중첩 import 가 있는 ES 모듈
+// (GLTFLoader.js 내부에서 'three' 및 상대 경로 파일을 재 import)을 Chromium 이
+// 동적으로 fetch 하지 못해 "Failed to fetch dynamically imported module" 가 난다.
+// 표준 http://127.0.0.1 로 로드하면 ESM 모듈 그래프 전체가 정상 처리된다.
 const MIME = {
     '.html': 'text/html',
-    '.js': 'text/javascript',
-    '.mjs': 'text/javascript',
+    '.js':   'text/javascript',
+    '.mjs':  'text/javascript',
     '.json': 'application/json',
-    '.css': 'text/css',
-    '.glb': 'model/gltf-binary',
+    '.css':  'text/css',
+    '.glb':  'model/gltf-binary',
     '.gltf': 'model/gltf+json',
     '.wasm': 'application/wasm',
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.svg': 'image/svg+xml',
+    '.png':  'image/png',
+    '.jpg':  'image/jpeg',
+    '.svg':  'image/svg+xml',
 };
 
-// app://bundle/<상대경로> → __dirname 아래 실제 파일을 안전하게 서빙
-function registerAppProtocol() {
-    protocol.handle(APP_SCHEME, async (request) => {
-        try {
-            const url = new URL(request.url);
+let serverPort = null;
+
+function startDevServer() {
+    return new Promise((resolve, reject) => {
+        const server = http.createServer((req, res) => {
+            const url = new URL(req.url, 'http://localhost');
             let rel = decodeURIComponent(url.pathname);
             if (!rel || rel === '/') rel = '/index.html';
             const filePath = path.normalize(path.join(__dirname, rel));
-            // 경로 탈출 방지: __dirname 밖이면 거부
+            // 경로 탈출 방지
             if (filePath !== __dirname && !filePath.startsWith(__dirname + path.sep)) {
-                return new Response('Forbidden', { status: 403 });
+                res.writeHead(403); res.end('Forbidden'); return;
             }
-            const buf = await fs.promises.readFile(filePath);
-            const mime = MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
-            return new Response(buf, { headers: { 'content-type': mime } });
-        } catch (e) {
-            return new Response('Not Found: ' + e.message, { status: 404 });
-        }
+            fs.readFile(filePath, (err, buf) => {
+                if (err) { res.writeHead(404); res.end('Not Found: ' + err.message); return; }
+                const mime = MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream';
+                res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-store' });
+                res.end(buf);
+            });
+        });
+        // port 0 → OS가 비어있는 포트를 자동 배정
+        server.listen(0, '127.0.0.1', () => {
+            serverPort = server.address().port;
+            resolve(serverPort);
+        });
+        server.on('error', reject);
     });
 }
 
@@ -81,7 +85,8 @@ try {
     });
 }
 
-function createWindow() {
+async function createWindow() {
+    const port = await startDevServer();
     const win = new BrowserWindow({
         width: 1400,
         height: 860,
@@ -95,14 +100,10 @@ function createWindow() {
         title: 'Physics Simulator',
         backgroundColor: '#0d1117',
     });
-    // file:// 대신 커스텀 app:// 프로토콜로 로드 (ESM 동적 import 안정화)
-    win.loadURL(`${APP_SCHEME}://bundle/index.html`);
+    win.loadURL(`http://127.0.0.1:${port}/index.html`);
 }
 
-app.whenReady().then(() => {
-    registerAppProtocol();
-    createWindow();
-});
+app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 
 ipcMain.handle('get-falling-objects', () => physics.getFallingObjects());
