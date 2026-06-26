@@ -269,6 +269,17 @@ body {
       <div class="field"><label>Yield <span>MPa</span></label><input type="number" id="inp-yield" value="30" min="0.1" step="1"></div>
     </div>
     <div class="field-hint" id="target-hint">두꺼울수록 잘 버팁니다. 충격이 한계를 넘어야 부서집니다.</div>
+    <div class="field" style="margin-top:8px">
+      <label class="tog-sw" style="display:inline-flex;align-items:center;gap:8px">
+        <input type="checkbox" id="feat-elevate"><span class="tog-knob"></span>
+        <span style="font-size:13px">바닥에서 띄우기 (지지대 위에 올림)</span>
+      </label>
+    </div>
+    <div class="field collapsed" id="elevate-row" style="display:none">
+      <label>띄울 높이 <span>m</span></label>
+      <input type="range" id="inp-elevate" min="0" max="20" step="0.5" value="6">
+      <div class="field-hint">타겟을 지지대 위로 올려 아래 공간을 확보합니다. 충격을 버티면 강판처럼 아래로 휘어집니다.</div>
+    </div>
   </div>
 
   <!-- Initial Conditions (always on) -->

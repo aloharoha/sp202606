@@ -4,11 +4,32 @@
   // import map(index.html)이 있어야 로드된다. 실패해도 핵심 렌더링은 살아남게
   // try/catch로 감싸고, GLB 기능만 비활성화한다.
   let GLTFLoader = null;
+  let glbLoaderError = null;
   try {
     ({ GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js'));
   } catch (e) {
+    glbLoaderError = e;
     console.warn('GLTFLoader 로드 실패 — GLB 모델 기능 비활성화', e);
   }
+
+  // ── 화면 토스트 (GLB 로드 성공/실패를 사용자에게 보이게) ──
+  function toast(msg, type = 'info', ms = 4200) {
+    let host = document.getElementById('toast-host');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'toast-host';
+      host.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none';
+      document.body.appendChild(host);
+    }
+    const el = document.createElement('div');
+    const bg = type === 'error' ? '#7f1d1d' : (type === 'ok' ? '#14532d' : '#1e293b');
+    const bd = type === 'error' ? '#f87171' : (type === 'ok' ? '#4ade80' : '#64748b');
+    el.style.cssText = `pointer-events:auto;max-width:520px;padding:10px 14px;border-radius:8px;font-size:13px;color:#fff;background:${bg};border:1px solid ${bd};box-shadow:0 4px 18px rgba(0,0,0,.45);white-space:pre-wrap`;
+    el.textContent = msg;
+    host.appendChild(el);
+    setTimeout(() => { el.style.transition = 'opacity .4s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 400); }, ms);
+  }
+
 
   // ── DOM refs ──
   const $ = id => document.getElementById(id);
@@ -152,6 +173,7 @@
     resize:     true,
     heat:       true,
     fragcol:    true,
+    elevate:    false,
   };
   const FEAT_BODY = {
     projectile: 'body-projectile', wind: 'body-wind', atmosphere: 'body-atmosphere',
@@ -192,7 +214,26 @@
         if (thHeat) thHeat.style.display = features.heat ? '' : 'none';
         if (thFlux) thFlux.style.display = features.heat ? '' : 'none';
         break;
+      case 'elevate': {
+        const row = document.getElementById('elevate-row');
+        if (row) row.style.display = features.elevate ? '' : 'none';
+        rebuildTargetMesh();
+        // 정지 상태(낙하 전)면 물체도 새 기준 높이로 재배치
+        if (!playing && fallingMesh) {
+          const by = getTargetBaseY();
+          fallingMesh.position.y = by;
+          if (glbMesh) glbMesh.position.y = by;
+        }
+        requestRender();
+        break;
+      }
     }
+  }
+  // 타겟을 바닥에서 띄운 높이(시각 단위). 토글 OFF면 0.
+  function getTargetBaseY() {
+    if (!features.elevate) return 0;
+    const el = document.getElementById('inp-elevate');
+    return el ? (+el.value || 0) : 6;
   }
   Object.keys(features).forEach(key => {
     const cb = $('feat-' + key); if (!cb) return;
@@ -750,7 +791,9 @@
   // ── [F17] GLB 모델 로더 ──
   // GLTFLoader 로드 실패 시 gltfLoader는 null — GLB 기능만 꺼지고 나머지는 정상.
   const gltfLoader = GLTFLoader ? new GLTFLoader() : null;
-  let glbMesh = null; // 현재 로드된 GLB 루트 오브젝트
+  let glbMesh = null;     // 현재 로드된 GLB 루트 오브젝트
+  let glbLoading = false; // 비동기 로딩 진행 중 여부
+  let glbLoadSeq = 0;     // 빠른 연속 선택 시 마지막 요청만 반영하기 위한 시퀀스
 
   function clearGlbMesh() {
     if (!glbMesh) return;
@@ -759,35 +802,68 @@
     glbMesh = null;
   }
 
+  // 모델 중심을 원점에 맞추고 크기를 ~2.5 유닛으로 정규화. fallingMesh를 대체.
   function applyGlbToFalling(root) {
     clearGlbMesh();
-    // 기존 fallingMesh 형상(구·박스 등)을 숨기고 GLB를 올린다
     if (fallingMesh) fallingMesh.visible = false;
-    // 크기 자동 정규화 (바운딩 박스 기준 ~ 2 유닛)
     const box = new THREE.Box3().setFromObject(root);
     const size = new THREE.Vector3(); box.getSize(size);
     const maxS = Math.max(size.x, size.y, size.z) || 1;
-    root.scale.setScalar(2 / maxS);
-    const center = new THREE.Vector3(); box.getCenter(center);
-    root.position.sub(center.multiplyScalar(2 / maxS));
-    root.castShadow = true;
-    root.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    const s = 2.5 / maxS;
+    root.scale.setScalar(s);
+    // 스케일 적용 후의 중심으로 다시 계산해 정확히 원점 정렬
+    const box2 = new THREE.Box3().setFromObject(root);
+    const center = new THREE.Vector3(); box2.getCenter(center);
+    root.position.sub(center);
+    root.traverse(c => {
+      if (!c.isMesh) return;
+      c.castShadow = true; c.receiveShadow = true;
+      // 일부 모델은 노멀이 뒤집혀 한쪽 면만 보이므로 양면 렌더링으로 안전하게
+      const mats = Array.isArray(c.material) ? c.material : (c.material ? [c.material] : []);
+      mats.forEach(m => { if (m) m.side = THREE.DoubleSide; });
+    });
     glbMesh = root;
     scene.add(glbMesh);
+    // 재생 중에 늦게 로드가 끝나면 즉시 표시되도록 가시성 보정
+    glbMesh.visible = true;
+    if (fallingMesh) fallingMesh.visible = false;
     requestRender();
   }
 
-  function loadGlbFromPath(path) {
+  // path가 비면 GLB 제거(기본 형상 복원). 아니면 비동기 로드 + 결과/오류를 토스트로 표시.
+  function loadGlbFromPath(path, label) {
+    const name = label || (path ? path.split('/').pop() : '');
     if (!path) {
-      // 선택 없음 → GLB 제거, 기본 형상 복원
       clearGlbMesh();
-      if (fallingMesh) fallingMesh.visible = true;
+      glbLoading = false;
+      if (fallingMesh) fallingMesh.visible = (selShape.value !== 'custom');
       requestRender(); return;
     }
-    if (!gltfLoader) { console.warn('[GLB] GLTFLoader 미사용 — 로드 불가'); return; }
-    gltfLoader.load(path, gltf => {
-      applyGlbToFalling(gltf.scene);
-    }, undefined, err => console.warn('[GLB] load failed:', path, err));
+    if (!gltfLoader) {
+      toast('GLB 로더(GLTFLoader)를 불러오지 못해 모델 기능을 쓸 수 없습니다.\n' +
+            (glbLoaderError ? String(glbLoaderError.message || glbLoaderError) : '원인 불명') +
+            '\n→ index.html의 import map / node_modules/three 설치를 확인하세요.', 'error', 9000);
+      return;
+    }
+    const seq = ++glbLoadSeq;
+    glbLoading = true;
+    toast(`GLB 로딩 중… (${name})`, 'info', 2000);
+    gltfLoader.load(
+      path,
+      gltf => {
+        if (seq !== glbLoadSeq) return; // 더 최신 요청이 들어왔으면 폐기
+        glbLoading = false;
+        applyGlbToFalling(gltf.scene);
+        toast(`GLB 로드 완료: ${name}`, 'ok', 2500);
+      },
+      undefined,
+      err => {
+        if (seq !== glbLoadSeq) return;
+        glbLoading = false;
+        console.error('[GLB] load failed:', path, err);
+        toast(`GLB 로드 실패: ${name}\n${err && (err.message || err.type) || err}\n경로: ${path}`, 'error', 9000);
+      }
+    );
   }
 
   // 드롭다운 선택 + 물리값 자동 설정
@@ -805,8 +881,40 @@
         inpMass.value = p.mass;
         inpArea.value = p.area;
         inpCd.value   = p.cd;
+        updateTV();
       }
     });
+  }
+
+  // 로컬 파일(File 객체)을 GLB로 로드 — 성공/실패 토스트 포함
+  function loadGlbFromFile(f, btn) {
+    if (!gltfLoader) {
+      toast('GLB 로더(GLTFLoader)를 불러오지 못해 모델 기능을 쓸 수 없습니다.', 'error', 9000);
+      return;
+    }
+    if (btn) btn.textContent = f.name;
+    const seq = ++glbLoadSeq;
+    glbLoading = true;
+    const url = URL.createObjectURL(f);
+    toast(`GLB 로딩 중… (${f.name})`, 'info', 2000);
+    gltfLoader.load(
+      url,
+      gltf => {
+        URL.revokeObjectURL(url);
+        if (seq !== glbLoadSeq) return;
+        glbLoading = false;
+        applyGlbToFalling(gltf.scene);
+        toast(`GLB 로드 완료: ${f.name}`, 'ok', 2500);
+      },
+      undefined,
+      err => {
+        URL.revokeObjectURL(url);
+        if (seq !== glbLoadSeq) return;
+        glbLoading = false;
+        console.error('[GLB] file load failed:', f.name, err);
+        toast(`GLB 로드 실패: ${f.name}\n${err && (err.message || err.type) || err}`, 'error', 9000);
+      }
+    );
   }
 
   // Shape → Custom GLB 프리셋/파일 핸들러
@@ -823,13 +931,7 @@
   if (fileShapeGlb) {
     fileShapeGlb.addEventListener('change', () => {
       const f = fileShapeGlb.files[0]; if (!f) return;
-      if (!gltfLoader) { console.warn('[GLB] GLTFLoader 미사용 — 로드 불가'); return; }
-      btnShapeGlbFile.textContent = f.name;
-      const url = URL.createObjectURL(f);
-      gltfLoader.load(url, gltf => {
-        applyGlbToFalling(gltf.scene);
-        URL.revokeObjectURL(url);
-      }, undefined, () => URL.revokeObjectURL(url));
+      loadGlbFromFile(f, btnShapeGlbFile);
     });
   }
 
@@ -855,18 +957,60 @@
     glass:   {color:0x93c5fd,roughness:0.05,metalness:0.1,transparent:true,opacity:0.4,geo:()=>new THREE.BoxGeometry(20,0.18,20)},
     brick:   {color:0xa0522d,roughness:0.95,metalness:0.0,geo:()=>new THREE.BoxGeometry(18,4,8)},
   };
+  let targetSupports=null; // 지지대 그룹 (띄우기 토글 시)
+  function clearTargetSupports() {
+    if(!targetSupports)return;
+    scene.remove(targetSupports);
+    targetSupports.traverse(c=>{if(c.geometry)c.geometry.dispose();if(c.material)c.material.dispose();});
+    targetSupports=null;
+  }
   function rebuildTargetMesh() {
     if(targetMesh){scene.remove(targetMesh);targetMesh.geometry.dispose();targetMesh.material.dispose();targetMesh=null;}
+    clearTargetSupports();
     const t=targetObjects[+selTarget.value]; if(!t)return;
     const cfg=TARGET_CFG[t.material]||TARGET_CFG.concrete;
-    targetMesh=new THREE.Mesh(cfg.geo(),new THREE.MeshStandardMaterial({
+    const geo=cfg.geo();
+    targetMesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({
       color:cfg.color,roughness:cfg.roughness,metalness:cfg.metalness,
       transparent:cfg.transparent||false,opacity:cfg.opacity||1.0,
     }));
-    targetMesh.position.y=0; targetMesh.receiveShadow=true; scene.add(targetMesh); requestRender();
+    const baseY=getTargetBaseY();
+    targetMesh.position.y=baseY; targetMesh.receiveShadow=true; scene.add(targetMesh);
+    // 띄우기 ON이면 네 모서리에 지지대 기둥을 세워 바닥과 연결
+    if(features.elevate && baseY>0.01){
+      targetSupports=new THREE.Group();
+      const gp=geo.parameters||{width:20,height:0.6,depth:20};
+      const halfH=(gp.height||0.6)*0.5;
+      const px=(gp.width||20)*0.42, pz=(gp.depth||20)*0.42;
+      const postH=baseY-halfH>0?baseY-halfH:baseY*0.5;
+      const postMat=new THREE.MeshStandardMaterial({color:0x4b5563,roughness:0.7,metalness:0.4});
+      [[px,pz],[-px,pz],[px,-pz],[-px,-pz]].forEach(([x,z])=>{
+        const post=new THREE.Mesh(new THREE.CylinderGeometry(0.5,0.5,postH,12),postMat);
+        post.position.set(x,postH*0.5,z); post.castShadow=true; post.receiveShadow=true;
+        targetSupports.add(post);
+      });
+      scene.add(targetSupports);
+    }
+    requestRender();
   }
   rebuildTargetMesh();
   selTarget.addEventListener('change',()=>{rebuildTargetMesh();syncTargetFields();});
+  // 띄울 높이 슬라이더 → 타겟/지지대 재배치 (정지 상태면 물체 기준 높이도 갱신)
+  {
+    const inpElevate=document.getElementById('inp-elevate');
+    if(inpElevate){
+      inpElevate.addEventListener('input',()=>{
+        if(!features.elevate)return;
+        rebuildTargetMesh();
+        if(!playing && fallingMesh){
+          const by=getTargetBaseY();
+          fallingMesh.position.y=by;
+          if(glbMesh) glbMesh.position.y=by;
+        }
+        requestRender();
+      });
+    }
+  }
 
   // [F6] Material tooltip (toggleable)
   selTarget.addEventListener('mousemove',e=>{
@@ -1526,12 +1670,13 @@
     chartPh.style.display='none'; graphCanvas.style.display='block'; graphLegend.style.display='flex';
     activeTab='velocity'; drawGraph(activeTab); buildTable(simResult); buildTrajLine(simResult);
     const visualH=Math.min(currentH0,1500);
+    const baseY=getTargetBaseY();
     clearFragments(); impacted=false; bouncing=false;
     if(targetMesh)targetMesh.visible=true;
-    fallingMesh.position.set(0,visualH,0); fallingMesh.visible=!glbMesh;
-    if(glbMesh){ glbMesh.position.set(0,visualH,0); glbMesh.visible=true; }
+    fallingMesh.position.set(0,baseY+visualH,0); fallingMesh.visible=!glbMesh;
+    if(glbMesh){ glbMesh.position.set(0,baseY+visualH,0); glbMesh.visible=true; }
     liveOverlay.style.display='block';
-    orbitTarget.set(0,visualH*0.4,0); orbitRadius=visualH*0.5+30; updateCamera();
+    orbitTarget.set(0,baseY+visualH*0.4,0); orbitRadius=visualH*0.5+30; updateCamera();
     playing=true; playHead=0; playState.c=0; lastHighlightedRow=null; requestRender();
   }
 
@@ -1545,6 +1690,11 @@
 
   // ── Run simulation ──
   btnRun.addEventListener('click',async()=>{
+    // Custom(GLB) 모드 안내: 모델 미선택/로딩중이면 구로 떨어지므로 알려준다
+    if(selShape.value==='custom'){
+      if(glbLoading) toast('GLB 로딩 중입니다 — 잠시 후 다시 실행하면 모델로 떨어집니다.', 'info', 3500);
+      else if(!glbMesh) toast('Custom(GLB) 모드인데 모델이 선택되지 않았습니다. 프리셋이나 파일을 먼저 고르세요. (지금은 기본 구로 낙하)', 'error', 6000);
+    }
     btnRun.disabled=true; btnRun.textContent='Computing...';
     clearFragments(); impacted=false; bouncing=false;
     if(targetMesh)targetMesh.visible=true;
@@ -1619,17 +1769,18 @@
     ovSpinRow.style.display=features.magnus?'flex':'none';
 
     const visualH=Math.min(currentH0,1500);
-    fallingMesh.position.set(0,visualH,0); fallingMesh.visible=!glbMesh;
-    if(glbMesh){ glbMesh.position.set(0,visualH,0); glbMesh.visible=true; }
+    const baseY=getTargetBaseY();
+    fallingMesh.position.set(0,baseY+visualH,0); fallingMesh.visible=!glbMesh;
+    if(glbMesh){ glbMesh.position.set(0,baseY+visualH,0); glbMesh.visible=true; }
     if(features.multiobj){
       moObjects.forEach((o,i)=>{
         const ox=(i+1)*5;
-        if(o.mesh){ o.mesh.position.set(ox,visualH,0); o.mesh.visible=!o.glbMesh; }
-        if(o.glbMesh){ o.glbMesh.position.set(ox,visualH,0); o.glbMesh.visible=true; }
+        if(o.mesh){ o.mesh.position.set(ox,baseY+visualH,0); o.mesh.visible=!o.glbMesh; }
+        if(o.glbMesh){ o.glbMesh.position.set(ox,baseY+visualH,0); o.glbMesh.visible=true; }
       });
     }
     liveOverlay.style.display='block';
-    orbitTarget.set(0,visualH*0.4,0); orbitRadius=visualH*0.5+30; updateCamera();
+    orbitTarget.set(0,baseY+visualH*0.4,0); orbitRadius=visualH*0.5+30; updateCamera();
     playing=true; playHead=0; playState.c=0; lastHighlightedRow=null;
 
     // [F15] on-demand save
@@ -1643,8 +1794,9 @@
   btnReset.addEventListener('click',()=>{
     playing=false;playHead=0;playState.c=0;impacted=false;bouncing=false;
     tDisp.textContent='0.000';hBar.style.height='100%';
-    if(fallingMesh){fallingMesh.position.set(0,0,0);fallingMesh.visible=!glbMesh;}
-    if(glbMesh){glbMesh.position.set(0,0,0);glbMesh.visible=true;}
+    const baseY=getTargetBaseY();
+    if(fallingMesh){fallingMesh.position.set(0,baseY,0);fallingMesh.visible=!glbMesh;}
+    if(glbMesh){glbMesh.position.set(0,baseY,0);glbMesh.visible=true;}
     moObjects.forEach(o=>{ if(o.mesh)o.mesh.visible=false; if(o.glbMesh)o.glbMesh.visible=false; });
     clearFragments();
     if(targetMesh)targetMesh.visible=true;
@@ -1703,17 +1855,18 @@
       hBar.style.height=(pct*100)+'%';
       skyMat.uniforms.altitudeFrac.value=Math.min(1,frame.h/40000);
       const visualH=Math.min(currentH0,1500);
+      const baseY=getTargetBaseY();
       // GLB 메시가 있으면 같은 위치로 동기화 (착지 후엔 bounce가 담당)
       if(glbMesh&&!impacted){
         glbMesh.position.x=(frame.px||0)*0.05;
-        glbMesh.position.y=pct*visualH;
+        glbMesh.position.y=baseY+pct*visualH;
         glbMesh.position.z=(frame.pz||0)*0.05;
         const sGlb=features.magnus?(0.04+(+inpSpinRpm.value||0)/3000):0.05;
         glbMesh.rotation.y+=sGlb;
       }
       if(fallingMesh&&!impacted){
         fallingMesh.position.x=(frame.px||0)*0.05;
-        fallingMesh.position.y=pct*visualH;
+        fallingMesh.position.y=baseY+pct*visualH;
         fallingMesh.position.z=(frame.pz||0)*0.05;
         // [F10] spin animation
         const spinMul=features.magnus?(0.04+(+inpSpinRpm.value||0)/3000):0.05;
@@ -1744,11 +1897,11 @@
           const fr2=lerpFrame(o.result.frames,playHead,o._cs);
           const p2=Math.max(0,Math.min(1,fr2.h/currentH0));
           const ox=(i+1)*5+(fr2.px||0)*0.05;
-          o.mesh.position.set(ox, p2*visualH, 0);
+          o.mesh.position.set(ox, baseY+p2*visualH, 0);
           o.mesh.rotation.x+=0.05;
           // GLB 메시가 있으면 구와 동일 위치에 동기화
           if(o.glbMesh){
-            o.glbMesh.position.set(ox, p2*visualH, 0);
+            o.glbMesh.position.set(ox, baseY+p2*visualH, 0);
             o.glbMesh.rotation.y+=0.05;
           }
         });
@@ -1814,7 +1967,7 @@
     if(bouncing&&fallingMesh){
       bounceVel-=currentG*2*dt;
       bounceY+=bounceVel*dt;
-      const targetTopY=(targetMesh?targetMesh.geometry.parameters.height*0.5:0.6)+0.8;
+      const targetTopY=getTargetBaseY()+(targetMesh?targetMesh.geometry.parameters.height*0.5:0.6)+0.8;
       if(bounceY<=targetTopY){
         bounceY=targetTopY; bounceVel*=-0.55;
         if(Math.abs(bounceVel)<0.6){bouncing=false;bounceVel=0;}
@@ -1851,4 +2004,12 @@
   }
   requestAnimationFrame(animLoop);
   window.addEventListener('resize',()=>{if(simResult)drawGraph(activeTab);requestRender();});
+
+  // GLB 로더가 아예 안 떴으면 시작 시 한 번 안내 (조용한 실패 방지)
+  if (!gltfLoader) {
+    setTimeout(() => toast(
+      'GLB 모델 로더를 초기화하지 못했습니다. GLB 선택이 동작하지 않습니다.\n' +
+      (glbLoaderError ? String(glbLoaderError.message || glbLoaderError) : '') +
+      '\n→ node_modules/three 설치 및 index.html import map 확인.', 'error', 10000), 800);
+  }
 })();
