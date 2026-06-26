@@ -42,6 +42,11 @@ npm run dist
 
 `dist/` 폴더에 설치 파일(`.exe`)이 생성됩니다.
 
+> ⚠️ **GLB 모델 로딩을 위해 `asar: false`로 패키징합니다** (`package.json`의 `build.asar`).
+> `.asar` 아카이브 안에서는 Chromium이 `three`의 ES 모듈을 동적으로 fetch하지 못해 GLB 로더가
+> 실패합니다. `asar: false`면 `node_modules`가 실제 파일로 풀려 정상 로드됩니다.
+> 이미 `.exe`를 만든 적이 있다면 이 설정 반영 후 **`npm run dist`를 다시 실행**하세요.
+
 ---
 
 ## 파일 구조
@@ -122,6 +127,7 @@ renderer.js      ← UI 로직 + Three.js 3D 애니메이션 + 물리 계산
 - **GLB 로드 진단/안정화**: GLB가 로드되지 않고 구(球)로 떨어지던 문제 대응. 그동안 `console.warn`으로만 묻히던 로드 실패를 **화면 토스트로 표시**(로딩 중 / 완료 / 실패+원인+경로). GLTFLoader 초기화 실패 시 시작할 때 안내. 빠른 연속 선택 시 마지막 요청만 반영(시퀀스 가드), 모델 중심 정렬·크기 정규화 개선, 양면 렌더링(DoubleSide)으로 노멀 뒤집힌 모델도 보이게 함.
 - **타겟 바닥에서 띄우기 (토글)**: Target Object 섹션에 `바닥에서 띄우기` 토글 + `띄울 높이` 슬라이더 추가. 켜면 타겟이 네 개의 지지대 기둥 위로 올라가 아래 공간이 생기고, 낙하 물체·GLB·멀티 오브젝트가 모두 올라간 타겟 표면 기준으로 떨어짐. 충격을 버티면 강판처럼 아래로 휘어질(deform) 공간이 확보됨. 토글 OFF면 기존과 동일(높이 0).
 - **Hyperbolic.glb 모델 파일 추가** (`assets/Hyperbolic.glb`).
+- **패키지 빌드에서 GLB 로드 실패 해결**: `.asar` 아카이브에서 Chromium이 `three` ES 모듈을 동적 fetch하지 못해 GLB 로더가 실패하던 문제. `package.json`의 `build.asar`를 `false`로 설정해 `node_modules`를 실제 파일로 풀어 정상 로드되게 함. (렌더링은 동적 import 방식 유지 — dev/패키지 모두에서 검증됨)
 
 > GLB가 여전히 안 보이면 화면 하단 토스트의 오류 메시지(원인·경로)를 확인하세요. 보통 `npm install`로 `node_modules/three`가 설치됐는지, `index.html`의 import map 경로가 맞는지 점검하면 됩니다.
 

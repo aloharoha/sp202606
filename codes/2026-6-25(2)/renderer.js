@@ -1,10 +1,16 @@
-// 정적 import: .asar 패키지 안에서 동적 import()는 Chromium fetch 제한으로 실패하지만
-// <script type="module">의 정적 import는 Electron이 .asar 핸들러로 처리해 정상 동작한다.
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-
 (async () => {
-  const glbLoaderError = null; // 정적 import이므로 로드 실패 시 모듈 자체가 중단됨
+  // 핵심 렌더링(three)은 동적 import로 로드한다. 이 방식은 dev/패키지 모두에서 검증됨.
+  const THREE = await import('three');
+  // GLB 로더는 별도로 로드하되 실패해도 렌더링은 살아남도록 try/catch.
+  // (.asar 패키지에서 Chromium fetch 제약으로 실패할 수 있어 build에서 asar:false 처리함)
+  let GLTFLoader = null;
+  let glbLoaderError = null;
+  try {
+    ({ GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js'));
+  } catch (e) {
+    glbLoaderError = e;
+    console.warn('GLTFLoader 로드 실패 — GLB 모델 기능 비활성화', e);
+  }
 
   // ── 화면 토스트 (GLB 로드 성공/실패를 사용자에게 보이게) ──
   function toast(msg, type = 'info', ms = 4200) {
@@ -784,7 +790,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
   // ── [F17] GLB 모델 로더 ──
   // GLTFLoader 로드 실패 시 gltfLoader는 null — GLB 기능만 꺼지고 나머지는 정상.
-  const gltfLoader = new GLTFLoader();
+  const gltfLoader = GLTFLoader ? new GLTFLoader() : null;
   let glbMesh = null;     // 현재 로드된 GLB 루트 오브젝트
   let glbLoading = false; // 비동기 로딩 진행 중 여부
   let glbLoadSeq = 0;     // 빠른 연속 선택 시 마지막 요청만 반영하기 위한 시퀀스
@@ -1998,4 +2004,12 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
   }
   requestAnimationFrame(animLoop);
   window.addEventListener('resize',()=>{if(simResult)drawGraph(activeTab);requestRender();});
+
+  // GLB 로더가 안 떴으면 시작 시 한 번 안내 (렌더링 자체는 정상 동작)
+  if (!gltfLoader) {
+    setTimeout(() => toast(
+      'GLB 모델 로더를 불러오지 못해 GLB 선택이 동작하지 않습니다(렌더링은 정상).\n' +
+      (glbLoaderError ? String(glbLoaderError.message || glbLoaderError) : '') +
+      '\n→ 패키지 빌드는 asar:false로 다시 빌드하세요(README 참고).', 'error', 9000), 800);
+  }
 })();
