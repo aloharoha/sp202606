@@ -46,6 +46,7 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
+            webSecurity: false, // file:// ES 모듈 동적 import 허용 (GLTFLoader 등)
         },
         title: 'Physics Simulator',
         backgroundColor: '#0d1117',

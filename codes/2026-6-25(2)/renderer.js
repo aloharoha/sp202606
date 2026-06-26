@@ -2,7 +2,6 @@
   // 핵심 렌더링(three)은 동적 import로 로드한다. 이 방식은 dev/패키지 모두에서 검증됨.
   const THREE = await import('three');
   // GLB 로더는 별도로 로드하되 실패해도 렌더링은 살아남도록 try/catch.
-  // (.asar 패키지에서 Chromium fetch 제약으로 실패할 수 있어 build에서 asar:false 처리함)
   let GLTFLoader = null;
   let glbLoaderError = null;
   try {
@@ -2010,6 +2009,6 @@
     setTimeout(() => toast(
       'GLB 모델 로더를 불러오지 못해 GLB 선택이 동작하지 않습니다(렌더링은 정상).\n' +
       (glbLoaderError ? String(glbLoaderError.message || glbLoaderError) : '') +
-      '\n→ 패키지 빌드는 asar:false로 다시 빌드하세요(README 참고).', 'error', 9000), 800);
+      '\n→ 앱을 재시작하거나 재설치해 보세요.', 'error', 9000), 800);
   }
 })();
