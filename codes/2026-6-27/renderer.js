@@ -91,6 +91,9 @@
   const fileShapeGlb         = $('file-shape-glb');
   const inpGlbScale          = $('inp-glb-scale');
   const glbScaleVal          = $('glb-scale-val');
+  const inpGlbScaleMin       = $('inp-glb-scale-min');
+  const inpGlbScaleMax       = $('inp-glb-scale-max');
+  const inpGlbScaleNum       = $('inp-glb-scale-num');
   const ovHeatRow        = $('ov-heat-row');
   const ovFluxRow        = $('ov-flux-row');
   const ovTemp           = $('ov-temp');
@@ -970,15 +973,44 @@
     );
   }
 
-  // 모델 크기 슬라이더 (비율 유지) — 1.0× 이면 정규화 기본 크기와 동일.
+  // 모델 크기 컨트롤 (비율 유지) — 1.0× 이면 정규화 기본 크기와 동일.
+  // 슬라이더 + 범위(최소/최대) 직접 지정 + 수치 직접 입력을 모두 동기화한다.
   if (inpGlbScale) {
     const fmtScale = v => (Math.round(v * 100) / 100).toFixed(2) + '×';
-    if (glbScaleVal) glbScaleVal.textContent = fmtScale(+inpGlbScale.value || 1);
-    inpGlbScale.addEventListener('input', () => {
-      glbUserScale = +inpGlbScale.value || 1;
-      if (glbScaleVal) glbScaleVal.textContent = fmtScale(glbUserScale);
+    // 최소/최대 입력칸을 읽어 유효한 범위로 보정
+    const readRange = () => {
+      let mn = parseFloat(inpGlbScaleMin && inpGlbScaleMin.value);
+      let mx = parseFloat(inpGlbScaleMax && inpGlbScaleMax.value);
+      if (!(mn > 0)) mn = 0.01;
+      if (!(mx > mn)) mx = mn + 0.01;
+      return { mn, mx };
+    };
+    const applyRangeToSlider = () => {
+      const { mn, mx } = readRange();
+      inpGlbScale.min = mn; inpGlbScale.max = mx;
+      return { mn, mx };
+    };
+    // 배율 v 적용. src 별로 입력칸 갱신 방식이 다름.
+    //  - 'num'  : 수치 직접 입력 → 범위를 벗어나면 슬라이더 범위를 넓혀 따라가게 함
+    //  - 그 외  : 슬라이더/범위 편집 → 현재 범위로 클램프
+    const setGlbScale = (v, src) => {
+      v = parseFloat(v); if (!(v > 0)) v = 1;
+      let { mn, mx } = applyRangeToSlider();
+      if (v < mn) { if (src === 'num' && inpGlbScaleMin) { inpGlbScaleMin.value = v; mn = v; } else v = mn; }
+      if (v > mx) { if (src === 'num' && inpGlbScaleMax) { inpGlbScaleMax.value = v; mx = v; } else v = mx; }
+      applyRangeToSlider();
+      glbUserScale = v;
+      if (src !== 'range' && inpGlbScale)    inpGlbScale.value = v;
+      if (src !== 'num'   && inpGlbScaleNum) inpGlbScaleNum.value = v;
+      if (glbScaleVal) glbScaleVal.textContent = fmtScale(v);
       applyGlbScale();
-    });
+    };
+    applyRangeToSlider();
+    setGlbScale(parseFloat(inpGlbScale.value) || 1, 'init');
+    inpGlbScale.addEventListener('input', () => setGlbScale(inpGlbScale.value, 'range'));
+    if (inpGlbScaleNum) inpGlbScaleNum.addEventListener('input', () => setGlbScale(inpGlbScaleNum.value, 'num'));
+    if (inpGlbScaleMin) inpGlbScaleMin.addEventListener('input', () => setGlbScale(glbUserScale, 'minmax'));
+    if (inpGlbScaleMax) inpGlbScaleMax.addEventListener('input', () => setGlbScale(glbUserScale, 'minmax'));
   }
 
   // Shape → Custom GLB 프리셋/파일 핸들러
