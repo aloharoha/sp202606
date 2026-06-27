@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+<title>Physics Simulator</title>
+<style>
+:root {
+  --bg:     #0d1117;
+  --panel:  #161b22;
+  --border: #21262d;
+  --accent: #238636;
+  --yellow: #f0a500;
+  --blue:   #58a6ff;
+  --red:    #f85149;
+  --green:  #3fb950;
+  --purple: #a371f7;
+  --orange: #f97316;
+  --text:   #c9d1d9;
+  --muted:  #6e7681;
+  --radius: 6px;
+  --mono:   'Consolas','Menlo',monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  height: 100vh;
+  display: grid; grid-template-rows: auto auto 1fr auto;
+  overflow: hidden; font-size: 13px;
+}
+/* ── Metric bar ── */
+.metric-bar { display: grid; grid-template-columns: repeat(4,1fr); border-bottom: 1px solid var(--border); background: var(--panel); }
+.mc { padding: 10px 14px; border-right: 1px solid var(--border); }
+.mc:last-child { border-right: none; }
+.mc-label { font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
+.dot { width: 16px; height: 2px; border-radius: 2px; }
+.d-blue{background:var(--blue)} .d-red{background:var(--red)} .d-green{background:var(--green)} .d-yellow{background:var(--yellow)}
+.mc-val { font-family: var(--mono); font-size: 18px; font-weight: 700; }
+.mc-unit { font-size: 10px; color: var(--muted); margin-left: 2px; }
+/* ── Toolbar ── */
+.toolbar { background: var(--panel); border-bottom: 1px solid var(--border); padding: 5px 10px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.tb-title { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.btn-sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }
+.btn-icon { background: none; border: 1px solid var(--border); color: var(--text); border-radius: var(--radius); width: 26px; height: 26px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 11px; transition: background .15s; }
+.btn-icon:hover { background: var(--border); }
+.btn-text { background: none; border: 1px solid var(--border); color: var(--text); border-radius: var(--radius); height: 26px; padding: 0 8px; cursor: pointer; display: flex; align-items: center; font-size: 10px; font-weight: 700; letter-spacing: .04em; transition: background .15s; white-space: nowrap; }
+.btn-text:hover { background: var(--border); }
+.btn-text.active, .btn-icon.active { border-color: var(--blue); color: var(--blue); background: rgba(88,166,255,0.08); }
+.btn-text.rec-on { border-color: var(--red); color: var(--red); background: rgba(248,81,73,0.08); }
+.btn-run { background: var(--accent); border: none; color: #fff; border-radius: var(--radius); padding: 5px 14px; font-size: 12px; font-weight: 700; cursor: pointer; transition: opacity .15s; letter-spacing: .02em; margin-left: auto; }
+.btn-run:hover { opacity: .85; }
+.btn-run:disabled { opacity: .4; cursor: not-allowed; }
+.t-display { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+/* ── Layout ── */
+.workspace { display: grid; grid-template-columns: var(--left-w, 230px) 5px 1fr 300px; overflow: hidden; }
+/* ── Left panel resizer (toggleable) ── */
+.panel-resizer { background: var(--border); cursor: col-resize; transition: background .15s; user-select: none; }
+.panel-resizer:hover, .panel-resizer.dragging { background: var(--blue); }
+.panel-resizer.disabled { cursor: default; pointer-events: none; }
+/* ── Left panel ── */
+.left-panel { background: var(--panel); border-right: 1px solid var(--border); padding: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.sec-hdr { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 4px; border-bottom: 1px solid var(--border); background: var(--panel); position: sticky; top: 0; z-index: 1; }
+.sec-title { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.sec-body { padding: 8px 10px 10px; border-bottom: 1px solid var(--border); }
+.sec-body.collapsed { display: none; }
+/* ── Toggle switch ── */
+.tog-sw { position: relative; display: inline-block; width: 28px; height: 15px; flex-shrink: 0; }
+.tog-sw input { opacity: 0; width: 0; height: 0; }
+.tog-knob { position: absolute; cursor: pointer; top:0; left:0; right:0; bottom:0; background: var(--border); border-radius: 15px; transition: .2s; }
+.tog-knob:before { content:''; position:absolute; height:11px; width:11px; left:2px; bottom:2px; background: var(--muted); border-radius:50%; transition:.2s; }
+.tog-sw input:checked + .tog-knob { background: var(--accent); }
+.tog-sw input:checked + .tog-knob:before { transform: translateX(13px); background: #fff; }
+/* ── Form fields ── */
+.field { margin-bottom: 7px; }
+.field label { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.field label span { color: var(--yellow); font-family: var(--mono); font-size: 10px; }
+.field input[type=number], .field select { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: var(--radius); padding: 5px 7px; font-size: 12px; font-family: var(--mono); outline: none; transition: border-color .2s; }
+.field input:focus, .field select:focus { border-color: var(--blue); }
+.field input[readonly] { color: var(--muted); cursor: not-allowed; }
+.field-hint { font-size: 10px; color: var(--muted); margin-top: 2px; font-family: var(--mono); line-height: 1.4; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+/* ── TV box ── */
+.tv-box { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; text-align: center; font-size: 11px; color: var(--muted); margin-top: 4px; }
+.tv-val { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--yellow); }
+/* ── Wind arrow ── */
+#wind-arrow-wrap { display: flex; align-items: center; justify-content: center; margin-top: 4px; }
+#wind-arrow-canvas { border-radius: 50%; border: 1px solid var(--border); }
+/* ── Multi-object list ── */
+.mo-item { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; margin-bottom: 6px; position: relative; }
+.mo-item-hdr { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+.mo-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.mo-label { font-size: 11px; font-weight: 700; }
+.mo-remove { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; }
+.mo-remove:hover { color: var(--red); }
+/* ── Dstr bar ── */
+.destr-bar-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; }
+.destr-label { font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+.destr-track { background: #21262d; border-radius: 3px; height: 7px; overflow: hidden; margin-bottom: 4px; }
+.destr-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg,var(--blue),var(--yellow)); transition: width .6s; width: 0%; }
+.destr-fill.danger { background: linear-gradient(90deg,var(--yellow),var(--red)); }
+.destr-level { font-size: 12px; font-weight: 700; text-align: center; padding: 4px; border-radius: 4px; color: var(--muted); }
+.lv0{color:#34d399;background:#052e16} .lv1{color:#fbbf24;background:#1c1000} .lv2{color:#f97316;background:#1f0a00} .lv3{color:#f43f5e;background:#1f0012} .lv4{color:var(--red);background:#200000}
+/* ── Energy info ── */
+.energy-box { margin-top: 8px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 10px; font-family: var(--mono); font-size: 11px; display: flex; flex-direction: column; gap: 3px; }
+.energy-row { display: flex; justify-content: space-between; }
+.energy-key { color: var(--muted); }
+.energy-val { color: var(--orange); font-weight: 700; }
+/* ── Recording history ── */
+.hist-item { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 10px; margin-bottom: 6px; }
+.hist-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.hist-ts { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+.hist-label { font-size: 11px; font-weight: 700; color: var(--text); flex: 1; }
+.hist-del { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; }
+.hist-del:hover { color: var(--red); }
+.hist-meta { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-bottom: 5px; }
+.hist-actions { display: flex; gap: 5px; }
+.hist-btn { background: none; border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 2px 8px; font-size: 10px; cursor: pointer; }
+.hist-btn:hover { background: var(--border); }
+/* ── STL btn ── */
+.stl-btn { width:100%; background:none; border:1px dashed var(--border); color:var(--muted); border-radius:var(--radius); padding:7px; font-size:11px; cursor:pointer; transition:border-color .2s,color .2s; }
+.stl-btn:hover { border-color:var(--blue); color:var(--text); }
+/* ── 3D Canvas ── */
+#canvas-wrap { position:relative; background:radial-gradient(ellipse at 50% 75%,#0f1d35 0%,#0d1117 70%); overflow:hidden; }
+#canvas-wrap canvas { display:block; }
+.h-bar-wrap { position:absolute; right:10px; top:10px; bottom:10px; width:12px; display:flex; flex-direction:column; align-items:center; gap:3px; }
+.h-bar-track { flex:1; width:4px; background:var(--border); border-radius:2px; position:relative; overflow:hidden; }
+.h-bar-fill { position:absolute; bottom:0; left:0; right:0; background:var(--blue); border-radius:2px; transition:height .08s; }
+.h-bar-label { font-family:var(--mono); font-size:8px; color:var(--muted); writing-mode:vertical-rl; }
+.live-overlay { position:absolute; top:12px; left:12px; background:rgba(13,17,23,.82); border:1px solid var(--border); border-radius:var(--radius); padding:10px 14px; font-family:var(--mono); font-size:11px; line-height:2; pointer-events:none; display:none; min-width:220px; }
+.live-overlay .ov-row { display:flex; justify-content:space-between; gap:16px; }
+.live-overlay .ov-label { color:var(--muted); }
+.live-overlay .ov-val { color:var(--text); font-weight:600; }
+.live-overlay .ov-atm { color:var(--purple); font-weight:700; }
+.atm-badge { position:absolute; bottom:10px; left:12px; background:rgba(13,17,23,.82); border:1px solid var(--border); border-radius:20px; padding:4px 12px; font-size:11px; color:var(--muted); pointer-events:none; }
+#cmp-badge { position:absolute; top:12px; right:30px; background:rgba(13,17,23,.82); border:1px solid var(--purple); border-radius:20px; padding:4px 12px; font-size:10px; color:var(--purple); pointer-events:none; display:none; }
+.orbit-hint { position:absolute; bottom:10px; right:28px; font-size:10px; color:var(--muted); background:rgba(13,17,23,.7); padding:3px 8px; border-radius:var(--radius); border:1px solid var(--border); pointer-events:none; }
+/* ── Right panel ── */
+.right-panel { background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+.tab-bar { display:flex; border-bottom:1px solid var(--border); flex-shrink:0; }
+.tab { flex:1; padding:7px 0; text-align:center; font-size:10px; font-weight:600; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; transition:color .15s,border-color .15s; }
+.tab.active { color:var(--text); border-bottom-color:var(--blue); }
+.tab:hover:not(.active) { color:var(--text); }
+.chart-area { flex:1; padding:10px; display:flex; flex-direction:column; gap:6px; overflow:hidden; min-height:0; }
+.chart-placeholder { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--muted); font-size:12px; gap:8px; }
+#graph-canvas { width:100%; flex:1; display:block; min-height:0; }
+.graph-legend { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; flex-shrink:0; }
+.leg-item { display:flex; align-items:center; gap:4px; font-size:10px; color:var(--muted); }
+.leg-dot { width:14px; height:2px; border-radius:2px; }
+.leg-dashed { width:14px; height:2px; border-top:2px dashed var(--purple); }
+/* History tab */
+.history-area { flex:1; padding:10px; overflow-y:auto; min-height:0; display:none; }
+.hist-empty { color:var(--muted); font-size:12px; text-align:center; padding:20px; }
+/* ── Data table ── */
+.data-table-wrap { border-top:1px solid var(--border); background:var(--panel); height:155px; overflow:hidden; display:flex; flex-direction:column; }
+.data-table-header { display:flex; align-items:center; gap:8px; padding:5px 14px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.data-table-header span { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }
+.tbl-info { font-size:10px; color:var(--muted); margin-left:auto; font-family:var(--mono); }
+.data-table-scroll { overflow-x:auto; overflow-y:hidden; flex:1; }
+.data-table { border-collapse:collapse; width:max-content; min-width:100%; font-family:var(--mono); font-size:11px; }
+.data-table th { position:sticky; top:0; background:var(--panel); color:var(--muted); font-weight:600; text-align:right; padding:4px 12px; border-bottom:1px solid var(--border); white-space:nowrap; font-size:10px; text-transform:uppercase; }
+.data-table th:first-child { text-align:left; }
+.data-table td { text-align:right; padding:4px 12px; border-bottom:1px solid rgba(33,38,45,.6); white-space:nowrap; color:var(--text); }
+.data-table td:first-child { text-align:left; color:var(--muted); }
+.data-table tr.highlight td { background:rgba(88,166,255,.08); }
+.data-table tr:hover td { background:rgba(255,255,255,.04); }
+.pct-bar { display:inline-block; height:6px; border-radius:3px; vertical-align:middle; margin-left:5px; }
+.tbl-placeholder { display:flex; align-items:center; justify-content:center; height:100%; color:var(--muted); font-size:12px; }
+/* ── Camera presets ── */
+#cam-bar { position:absolute; bottom:42px; right:28px; display:flex; flex-direction:column; gap:3px; z-index:2; }
+.cam-btn { background:rgba(13,17,23,.82); border:1px solid var(--border); color:var(--muted); border-radius:var(--radius); padding:3px 10px; font-size:10px; font-weight:600; cursor:pointer; letter-spacing:.04em; transition:background .15s,color .15s; text-align:center; }
+.cam-btn:hover { background:rgba(33,38,45,.9); color:var(--text); }
+.cam-btn.active { border-color:var(--blue); color:var(--blue); background:rgba(88,166,255,.08); }
+/* ── LS preset bar ── */
+#ls-preset-bar { margin-top:5px; display:flex; flex-direction:column; gap:4px; }
+#ls-preset-bar input { width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:var(--radius); padding:4px 7px; font-size:11px; font-family:var(--mono); outline:none; }
+#ls-preset-bar input:focus { border-color:var(--blue); }
+#ls-preset-bar select { flex:1; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:var(--radius); padding:4px 7px; font-size:11px; font-family:var(--mono); outline:none; }
+/* ── Material tooltip ── */
+#mat-tooltip { position:fixed; z-index:9999; background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:8px 12px; font-size:11px; line-height:1.8; pointer-events:none; display:none; min-width:160px; box-shadow:0 4px 16px rgba(0,0,0,.4); }
+#mat-tooltip .tt-title { font-weight:700; color:var(--text); margin-bottom:4px; }
+#mat-tooltip .tt-row { display:flex; justify-content:space-between; gap:12px; }
+#mat-tooltip .tt-key { color:var(--muted); }
+#mat-tooltip .tt-val { color:var(--yellow); font-family:var(--mono); }
+</style>
+</head>
+<body>
+
+<div class="metric-bar">
+  <div class="mc"><div class="mc-label"><span class="dot d-blue"></span>Terminal Velocity</div><div><span class="mc-val" id="m-vt">—</span><span class="mc-unit" id="u-vt">m/s</span></div></div>
+  <div class="mc"><div class="mc-label"><span class="dot d-red"></span>Impact Velocity</div><div><span class="mc-val" id="m-vi">—</span><span class="mc-unit" id="u-vi">m/s</span></div></div>
+  <div class="mc"><div class="mc-label"><span class="dot d-green"></span>Fall Time</div><div><span class="mc-val" id="m-ft">—</span><span class="mc-unit">s</span></div></div>
+  <div class="mc"><div class="mc-label"><span class="dot d-yellow"></span>Time to Terminal Vel.</div><div><span class="mc-val" id="m-tt">—</span><span class="mc-unit">s</span></div></div>
+</div>
+
+<div class="toolbar">
+  <span class="tb-title">3D Preview</span>
+  <button class="btn-icon" id="btn-play"  title="Play">▶</button>
+  <button class="btn-icon" id="btn-stop"  title="Stop">⏹</button>
+  <button class="btn-icon" id="btn-reset" title="Reset">↺</button>
+  <span class="t-display">t = <span id="t-disp">0.000</span> s</span>
+  <div class="btn-sep"></div>
+  <button class="btn-text" id="btn-traj"    title="Trajectory line">TRAJ</button>
+  <button class="btn-text" id="btn-compare" title="Save reference">REF</button>
+  <button class="btn-text" id="btn-record"  title="Record simulation">REC</button>
+  <div class="btn-sep"></div>
+  <button class="btn-text" id="btn-export-png" title="Export PNG">PNG</button>
+  <button class="btn-text" id="btn-export-csv" title="Export CSV">CSV</button>
+  <button class="btn-text" id="btn-save-json"  title="Save JSON">SAV</button>
+  <button class="btn-text" id="btn-load-json"  title="Load JSON">LOD</button>
+  <input type="file" id="file-json" accept=".json" style="display:none">
+  <div class="btn-sep"></div>
+  <button class="btn-text" id="btn-unit" title="단위 전환 (SI → km/h → IMP)">SI</button>
+  <button class="btn-run" id="btn-run">Run Simulation</button>
+</div>
+
+<div class="workspace">
+<!-- ══ LEFT PANEL ══ -->
+<div class="left-panel">
+
+  <!-- Falling Object (always on) -->
+  <div class="sec-hdr"><span class="sec-title">Falling Object</span></div>
+  <div class="sec-body">
+    <div class="field"><label>Preset</label><select id="sel-preset"><option value="-1">— Custom —</option></select></div>
+    <div id="ls-preset-bar">
+      <div style="display:flex;gap:4px">
+        <input id="inp-ls-name" placeholder="프리셋 이름 입력...">
+        <button class="btn-text" id="btn-ls-save" style="flex-shrink:0;height:26px">저장</button>
+      </div>
+      <div style="display:flex;gap:4px">
+        <select id="sel-ls"><option value="">저장된 프리셋...</option></select>
+        <button class="btn-text" id="btn-ls-load" style="flex-shrink:0;height:26px">불러오기</button>
+        <button class="btn-text" id="btn-ls-del" style="flex-shrink:0;height:26px;color:var(--red);border-color:var(--red)">삭제</button>
+      </div>
+    </div>
+    <div class="field"><label>Shape</label>
+      <select id="sel-shape">
+        <option value="sphere">Sphere</option><option value="cylinder">Cylinder</option>
+        <option value="box">Box</option><option value="cone">Cone</option>
+        <option value="custom">Custom (GLB)</option>
+      </select>
+    </div>
+    <div id="custom-glb-row" style="display:none;flex-direction:column;gap:6px;margin-bottom:6px">
+      <select id="sel-shape-glb-preset">
+        <option value="">— 프리셋 선택 —</option>
+        <option value="assets/Classic_table.glb">Classic_table.glb</option>
+        <option value="assets/screwdriver.glb">screwdriver.glb</option>
+        <option value="assets/Hyperbolic.glb">Hyperbolic.glb</option>
+      </select>
+      <button class="stl-btn" id="btn-shape-glb-file">⬆ GLB / STL 파일 직접 불러오기</button>
+      <input type="file" id="file-shape-glb" accept=".glb,.stl" style="display:none">
+    </div>
+    <div class="row2">
+      <div class="field"><label>Mass <span>kg</span></label><input type="number" id="inp-mass" value="1" min="0.01" step="0.1"></div>
+      <div class="field"><label>Area <span>m²</span></label><input type="number" id="inp-area" value="0.01" min="0.0001" step="0.001"></div>
+    </div>
+    <div class="field"><label>Drag Coefficient Cd</label><input type="number" id="inp-cd" value="0.47" min="0.01" step="0.01"></div>
+    <div class="tv-box">Terminal vel = <span class="tv-val" id="tv-live">—</span> m/s</div>
+  </div>
+
+  <!-- Target (always on) -->
+  <div class="sec-hdr"><span class="sec-title">Target Object</span></div>
+  <div class="sec-body">
+    <div class="field"><label>Material</label><select id="sel-target"></select></div>
+    <div class="row2">
+      <div class="field"><label>Thickness <span>mm</span></label><input type="number" id="inp-thickness" value="100" min="1" step="5"></div>
+      <div class="field"><label>Yield <span>MPa</span></label><input type="number" id="inp-yield" value="30" min="0.1" step="1"></div>
+    </div>
+    <div class="field-hint" id="target-hint">두꺼울수록 잘 버팁니다. 충격이 한계를 넘어야 부서집니다.</div>
+    <div class="field" style="margin-top:8px">
+      <label class="tog-sw" style="display:inline-flex;align-items:center;gap:8px">
+        <input type="checkbox" id="feat-elevate"><span class="tog-knob"></span>
+        <span style="font-size:13px">바닥에서 띄우기 (지지대 위에 올림)</span>
+      </label>
+    </div>
+    <div class="field collapsed" id="elevate-row" style="display:none">
+      <label>띄울 높이 <span>m</span></label>
+      <input type="range" id="inp-elevate" min="0" max="20" step="0.5" value="6">
+      <div class="field-hint">타겟을 지지대 위로 올려 아래 공간을 확보합니다. 충격을 버티면 강판처럼 아래로 휘어집니다.</div>
+    </div>
+  </div>
+
+  <!-- Initial Conditions (always on) -->
+  <div class="sec-hdr"><span class="sec-title">Initial Conditions</span></div>
+  <div class="sec-body">
+    <div class="field"><label>Height <span>m</span></label><input type="number" id="inp-height" value="500" min="1" step="10"></div>
+    <div class="row2">
+      <div class="field"><label>Speed <span>m/s</span></label><input type="number" id="inp-v0" value="0" step="1" min="0"></div>
+      <div class="field"><label>Gravity <span>m/s²</span></label><input type="number" id="inp-g" value="9.81" min="0.1" step="0.01"></div>
+    </div>
+  </div>
+
+  <!-- F13 Projectile Mode -->
+  <div class="sec-hdr">
+    <span class="sec-title">Projectile Mode</span>
+    <label class="tog-sw"><input type="checkbox" id="feat-projectile"><span class="tog-knob"></span></label>
+  </div>
+  <div class="sec-body collapsed" id="body-projectile">
+    <div class="row2">
+      <div class="field"><label>Launch Angle <span>°</span></label><input type="number" id="inp-launch-angle" value="45" min="1" max="89" step="1"></div>
+      <div class="field"><label>Azimuth <span>°N</span></label><input type="number" id="inp-launch-azimuth" value="0" min="0" max="359" step="5"></div>
+    </div>
+    <div class="field-hint">45° = oblique · 89° ≈ vertical drop</div>
+  </div>
+
+  <!-- F1 Wind -->
+  <div class="sec-hdr">
+    <span class="sec-title">Wind</span>
+    <label class="tog-sw"><input type="checkbox" id="feat-wind" checked><span class="tog-knob"></span></label>
+  </div>
+  <div class="sec-body" id="body-wind">
+    <div class="row2">
+      <div class="field"><label>Wind X (E+) <span>m/s</span></label><input type="number" id="inp-wind-x" value="0" step="0.5"></div>
+      <div class="field"><label>Wind Z (S+) <span>m/s</span></label><input type="number" id="inp-wind-z" value="0" step="0.5"></div>
+    </div>
+    <div id="wind-arrow-wrap"><canvas id="wind-arrow-canvas" width="64" height="64"></canvas></div>
+    <div class="field-hint" id="wind-hint">No wind</div>
+  </div>
+
+  <!-- F8 Atmosphere -->
+  <div class="sec-hdr">
+    <span class="sec-title">Atmosphere</span>
+    <label class="tog-sw"><input type="checkbox" id="feat-atmosphere" checked><span class="tog-knob"></span></label>
+  </div>
+  <div class="sec-body" id="body-atmosphere">
+    <div class="row2">
+      <div class="field"><label>Temp Offset <span>°C</span></label><input type="number" id="inp-temp" value="0" step="1" min="-50" max="50"></div>
+      <div class="field"><label>Humidity <span>%</span></label><input type="number" id="inp-humidity" value="50" step="5" min="0" max="100"></div>
+    </div>
+    <div class="field-hint" id="atm-rho-hint">Sea-level ρ = 1.225 kg/m³</div>
+  </div>
+
+  <!-- F7/F10 Spin & Magnus -->
+  <div class="sec-hdr">
+    <span class="sec-title">Spin &amp; Magnus</span>
+    <label class="tog-sw"><input type="checkbox" id="feat-magnus"><span class="tog-knob"></span></label>
+  </div>
+  <div class="sec-body collapsed" id="body-magnus">
+    <div class="field"><label>Spin Rate <span>RPM</span></label><input type="number" id="inp-spin-rpm" value="500" min="0" step="100"></div>
+    <div class="field"><label>Spin Axis</label>
+      <select id="sel-spin-axis">
+        <option value="z">Z — topspin / backspin</option>
+        <option value="x">X — sidespin</option>
+        <option value="y">Y — rifling (vertical)</option>
+      </select>
+    </div>
+    <div class="field-hint" id="magnus-hint">—</div>
+  </div>
+
+  <!-- F12 Terrain -->
+  <div class="sec-hdr">
+    <span class="sec-title">Terrain</span>
+    <label class="tog-sw"><input type="checkbox" id="feat-terrain"><span class="tog-knob"></span></label>
+  </div>
+  <div class="sec-body collapsed" id="body-terrain">
+    <div class="field"><label>Type</label>
+      <select id="sel-terrain">
+        <option value="flat">Flat Ground</option>
+        <option value="slope">Slope</option>
+        <option value="water">Water</option>
+        <option value="elevated">Elevated (Building)</option>
+      </select>
+    </div>
+    <div class="field" id="field-slope" style="display:none">
+      <label>Slope Angle <span>°</span></label>
+      <input type="number" id="inp-slope" value="15" min="0" max="60" step="5">
+    </div>
+  </div>
+
+  <!-- F11 Multi-Object -->
+  <div class="sec-hdr">
+    <span class="sec-title">Multi-Object</span>
+    <label class="tog-sw"><input type="checkbox" id="feat-multiobj"><span class="tog-knob"></span></label>
+  </div>
+  <div class="sec-body collapsed" id="body-multiobj">
+    <div id="mo-list"></div>
+    <button class="stl-btn" id="btn-add-obj">+ Add Object (max 3)</button>
+  </div>
+
+  <!-- Impact Result (always on) -->
+  <div class="sec-hdr"><span class="sec-title">Impact Result</span></div>
+  <div class="sec-body">
+    <div class="destr-bar-wrap">
+      <div class="destr-label">Destruction Ratio</div>
+      <div class="destr-track"><div class="destr-fill" id="destr-fill"></div></div>
+      <div class="destr-level" id="destr-level">—</div>
+    </div>
+    <div class="energy-box" id="energy-box" style="display:none">
+      <div class="energy-row"><span class="energy-key">Kinetic Energy</span><span class="energy-val" id="e-ke">—</span></div>
+      <div class="energy-row"><span class="energy-key">Momentum</span><span class="energy-val" id="e-mom">—</span></div>
+      <div class="energy-row"><span class="energy-key">Avg Impact Force</span><span class="energy-val" id="e-force">—</span></div>
+    </div>
+  </div>
+
+  <!-- F9 Impact Energy toggle -->
+  <div class="sec-hdr">
+    <span class="sec-title">Impact Energy</span>
+    <label class="tog-sw"><input type="checkbox" id="feat-energy" checked><span class="tog-knob"></span></label>
+  </div>
+
+  <!-- F15 Recording -->
+  <div class="sec-hdr">
+    <span class="sec-title">Recording</span>
+    <label class="tog-sw"><input type="checkbox" id="feat-record"><span class="tog-knob"></span></label>
+  </div>
+  <div class="sec-body collapsed" id="body-record">
+    <div class="field-hint" style="margin-bottom:4px">REC → Run → result saved to History tab</div>
+    <button class="stl-btn" id="btn-save-hist">⬇ Export All Recordings</button>
+  </div>
+
+  <!-- F2 Crater / F5 Traj / F6 Tooltip / F3 Compare / F4 Export -->
+  <div class="sec-hdr"><span class="sec-title">Visual Features</span></div>
+  <div class="sec-body">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px">
+        <span style="color:var(--muted)">Crater on impact</span>
+        <label class="tog-sw"><input type="checkbox" id="feat-crater" checked><span class="tog-knob"></span></label>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px">
+        <span style="color:var(--muted)">Trajectory line (TRAJ)</span>
+        <label class="tog-sw"><input type="checkbox" id="feat-traj"><span class="tog-knob"></span></label>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px">
+        <span style="color:var(--muted)">Material tooltip</span>
+        <label class="tog-sw"><input type="checkbox" id="feat-tooltip" checked><span class="tog-knob"></span></label>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px">
+        <span style="color:var(--muted)">Instanced fragments</span>
+        <label class="tog-sw"><input type="checkbox" id="feat-instfrag" checked><span class="tog-knob"></span></label>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px">
+        <span style="color:var(--muted)">설정창 폭 조절 (drag)</span>
+        <label class="tog-sw"><input type="checkbox" id="feat-resize" checked><span class="tog-knob"></span></label>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px">
+        <span style="color:var(--muted)">공력 가열 표시 (Heat)</span>
+        <label class="tog-sw"><input type="checkbox" id="feat-heat" checked><span class="tog-knob"></span></label>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px">
+        <span style="color:var(--muted)">파편 충돌 판정 (Collision)</span>
+        <label class="tog-sw"><input type="checkbox" id="feat-fragcol" checked><span class="tog-knob"></span></label>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3D Model -->
+  <div class="sec-hdr"><span class="sec-title">3D Model</span></div>
+  <div class="sec-body">
+    <div class="field">
+      <label>기본 GLB 모델</label>
+      <select id="sel-glb-preset">
+        <option value="">— 없음 (기본 형상) —</option>
+        <option value="assets/Classic_table.glb">Classic_table.glb</option>
+        <option value="assets/screwdriver.glb">screwdriver.glb</option>
+        <option value="assets/Hyperbolic.glb">Hyperbolic.glb</option>
+      </select>
+    </div>
+    <button class="stl-btn" id="btn-stl">⬆ 파일에서 직접 불러오기 (STL / GLB)</button>
+    <input type="file" id="file-stl" accept=".stl,.glb" style="display:none">
+    <div class="field" style="margin-top:8px">
+      <label>모델 크기 (비율 유지) <span id="glb-scale-val">1.00×</span></label>
+      <input type="range" id="inp-glb-scale" min="0.1" max="5" step="0.05" value="1">
+    </div>
+  </div>
+
+</div><!-- /left-panel -->
+
+<!-- ══ LEFT PANEL RESIZER (drag to resize settings panel) ══ -->
+<div class="panel-resizer" id="panel-resizer" title="드래그: 설정창 폭 조절 · 더블클릭: 기본값"></div>
+
+<!-- ══ 3D CANVAS ══ -->
+<div id="canvas-wrap">
+  <div class="live-overlay" id="live-overlay">
+    <div class="ov-row"><span class="ov-label">Time</span>     <span class="ov-val"><span id="ov-t">0.000</span> s</span></div>
+    <div class="ov-row"><span class="ov-label">Altitude</span> <span class="ov-val"><span id="ov-h">0.0</span> <span id="u-ov-h">m</span></span></div>
+    <div class="ov-row"><span class="ov-label">Velocity</span> <span class="ov-val"><span id="ov-v">0.0</span> <span id="u-ov-v">m/s</span></span></div>
+    <div class="ov-row"><span class="ov-label">Air ρ</span>    <span class="ov-val"><span id="ov-rho">1.225</span> kg/m³</span></div>
+    <div class="ov-row"><span class="ov-label">Atmosphere</span><span class="ov-atm" id="ov-atm">Troposphere</span></div>
+    <div class="ov-row" id="ov-drift-row" style="display:none"><span class="ov-label">Drift X/Z</span><span class="ov-val"><span id="ov-px">0.0</span> / <span id="ov-pz">0.0</span> m</span></div>
+    <div class="ov-row" id="ov-spin-row" style="display:none"><span class="ov-label">Magnus F</span><span class="ov-val"><span id="ov-mf">0.0</span> N</span></div>
+    <div class="ov-row" id="ov-heat-row" style="display:none"><span class="ov-label">Surface T</span><span class="ov-val" style="color:#f97316"><span id="ov-temp">0</span> °C</span></div>
+    <div class="ov-row" id="ov-flux-row" style="display:none"><span class="ov-label">Heat Flux</span><span class="ov-val" style="color:#f85149"><span id="ov-flux">0.0</span> W/m²</span></div>
+  </div>
+  <div class="atm-badge" id="atm-badge">Ready</div>
+  <div id="cmp-badge">REF saved</div>
+  <div class="h-bar-wrap">
+    <div class="h-bar-track"><div class="h-bar-fill" id="h-bar" style="height:100%"></div></div>
+    <span class="h-bar-label">m</span>
+  </div>
+  <div id="cam-bar">
+    <button class="cam-btn active" data-cam="reset">기본</button>
+    <button class="cam-btn" data-cam="front">정면</button>
+    <button class="cam-btn" data-cam="side">측면</button>
+    <button class="cam-btn" data-cam="top">위</button>
+    <button class="cam-btn" data-cam="follow">추적</button>
+  </div>
+  <div class="orbit-hint">LMB: rotate &nbsp;|&nbsp; RMB: pan &nbsp;|&nbsp; Scroll: zoom</div>
+</div>
+
+<!-- ══ RIGHT PANEL ══ -->
+<div class="right-panel">
+  <div class="tab-bar">
+    <div class="tab active" data-tab="velocity">Velocity</div>
+    <div class="tab" data-tab="height">Height</div>
+    <div class="tab" data-tab="acceleration">Accel.</div>
+    <div class="tab" data-tab="density">Air ρ</div>
+    <div class="tab" data-tab="history">History</div>
+    <button class="btn-text" id="btn-realtime" title="실시간 그래프: 재생 중 점진적으로 표시" style="margin:auto 4px auto auto;font-size:9px;height:22px;padding:0 7px;flex-shrink:0">실시간</button>
+  </div>
+  <div class="chart-area" id="chart-area">
+    <div class="chart-placeholder" id="chart-ph">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="M7 17l4-6 3 4 2-3 2 2"/></svg>
+      Run the simulation to see charts
+    </div>
+    <canvas id="graph-canvas" style="display:none"></canvas>
+    <div class="graph-legend" id="graph-legend" style="display:none"></div>
+  </div>
+  <div class="history-area" id="history-area">
+    <div class="hist-empty" id="hist-empty">No recordings yet.<br>Enable Recording and run a simulation.</div>
+    <div id="hist-list"></div>
+  </div>
+</div>
+</div><!-- /workspace -->
+
+<div class="data-table-wrap">
+  <div class="data-table-header">
+    <span>Trajectory Data</span>
+    <span style="color:var(--blue);font-size:10px">every 0.1 s</span>
+    <span class="tbl-info" id="tbl-info">—</span>
+  </div>
+  <div class="data-table-scroll">
+    <div class="tbl-placeholder" id="tbl-placeholder">Run the simulation to see data table</div>
+    <table class="data-table" id="data-table" style="display:none">
+      <thead>
+        <tr>
+          <th>Time (s)</th><th>Altitude (m)</th><th>Velocity (m/s)</th>
+          <th>% Terminal</th><th>Accel. (m/s²)</th><th>Air ρ (kg/m³)</th>
+          <th>Atmosphere</th><th>Drift X (m)</th><th>Drift Z (m)</th>
+          <th id="th-heat" style="display:none">Surface T (°C)</th><th id="th-flux" style="display:none">Heat Flux (W/m²)</th>
+        </tr>
+      </thead>
+      <tbody id="tbl-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="mat-tooltip">
+  <div class="tt-title" id="tt-name"></div>
+  <div class="tt-row"><span class="tt-key">Yield Strength</span><span class="tt-val" id="tt-ys"></span></div>
+  <div class="tt-row"><span class="tt-key">Thickness</span>    <span class="tt-val" id="tt-th"></span></div>
+  <div class="tt-row"><span class="tt-key">Fracture Mode</span><span class="tt-val" id="tt-fm"></span></div>
+</div>
+
+<script src="renderer.bundle.js"></script>
+</body>
+</html>
