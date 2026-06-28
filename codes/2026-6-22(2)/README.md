@@ -135,3 +135,26 @@ loader.load('./models/your-model.glb', (gltf) => {
   헤드(세로선)만 매번 덧그리기.
 - **하늘 구체 세그먼트 축소** — `SphereGeometry(80000,32,16)` → 더 낮은 분할.
 - **frustum culling / LOD** — 카메라가 멀 때 낙하체·파편 디테일을 낮추기.
+
+---
+
+## 2026-6-22(2) 변경 사항 (바람·기상·내보내기·비교 모드 등)
+
+`2026-6-22(1)` 기반. 사용자 입력 변수와 데이터 입출력을 크게 확장한 버전.
+C++ 의 공기밀도 함수 시그니처가 바뀌었으므로 **`npm run build-addon` 재실행** 필요.
+
+### 환경 입력 확장
+- **바람 (X/Z)** — `inp-wind-x`, `inp-wind-z` 추가. 풍속 벡터가 낙하 궤적과 착탄 위치(`ov-drift-row`, `ov-px`, `ov-pz`)에 반영.
+- **기온 편차 / 습도** — `inp-temp`, `inp-humidity` 추가. `calcAirDensity(alt, tempOffset, humidity)` 로 시그니처 확장하여 표준 ISA 대비 공기밀도가 달라지게 함. `atm-rho-hint` 로 현재 공기밀도를 인라인으로 안내.
+
+### 데이터 입출력 / 비교 모드
+- **CSV / PNG 내보내기** — `btn-export-csv`, `btn-export-png` 추가. 프레임 표·캔버스를 파일로 저장.
+- **설정 JSON 저장/불러오기** — `btn-save-json`, `btn-load-json`, `file-json` 추가. 입력 값 전체를 JSON 으로 직렬화.
+- **비교 모드** — `btn-compare`, `cmp-badge` 추가. 두 시뮬레이션 결과를 그래프 위에 겹쳐 비교.
+- **궤적 라인 토글** — `btn-traj` 로 낙하 궤적 표시 ON/OFF.
+
+### UI / 시각화
+- **재질 툴팁** — `mat-tooltip`, `tt-name`, `tt-fm`, `tt-th` — 타깃 재질 드롭다운에 호버 툴팁으로 항복강도·파괴 모드·기본 두께를 표시.
+- **표류 오버레이** — 바람에 의한 수평 이동(`ov-drift-row`, `ov-px`, `ov-pz`)을 실시간 오버레이에 추가.
+
+> 입력 변수와 UI 가 크게 늘어났으므로, 이전 버전의 JSON 설정 파일을 그대로 불러오면 일부 항목이 비어 있을 수 있습니다(기본값으로 폴백).

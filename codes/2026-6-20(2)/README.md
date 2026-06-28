@@ -83,3 +83,15 @@ loader.load('./models/your-model.glb', (gltf) => {
   scene.add(gltf.scene);
 });
 ```
+
+---
+
+## 2026-6-20(2) 변경 사항 (코드 정리)
+
+`2026-6-20(1)` 기반. 기능은 그대로 두고 잔여 코드를 정리한 패스.
+
+- **`main.js` 정리** — 주석/데드 코드 제거, 윈도우 타이틀을 `Physics Simulator` 로 정리, 배경색을 `#0d1117` 로 조정, DevTools 자동 열림 코드 정리.
+- **`physics/physics.cpp` 다이어트** — 미사용 분기/중복 계산을 정리해 162 → 134 줄로 축약(공개 함수 시그니처는 동일).
+- **`preload.js` 작은 정리** — IPC 노출 항목 일관성 정리.
+
+> 기능 변경 없음. C++ 변경은 있으므로 빌드 시 **`npm run build-addon` 재실행** 필요.

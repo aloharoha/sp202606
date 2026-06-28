@@ -83,3 +83,25 @@ loader.load('./models/your-model.glb', (gltf) => {
   scene.add(gltf.scene);
 });
 ```
+
+---
+
+## 2026-6-21 변경 사항 (타깃 오브젝트 · 파괴 시각화 · 파편)
+
+`2026-6-20(2)` 기반. 충돌 대상과 파괴 결과를 실제 형상으로 보여주는 큰 변화.
+
+### C++ 물리 엔진 확장 (134 → 307 줄)
+- **`computeFracture`** — 충격 결과로부터 파편 분포·파괴 정도를 계산하는 메인 진입점.
+- **`computeFractureMode`** — 충격 압력·재질 항복강도 비교로 파괴 모드를 분기.
+- **`computeShatter`** — 깨짐(shatter) 형상 산출. `buildConvexFragment` / `buildFragmentIndices` 로 컨벡스 파편 메시 데이터 생성.
+- **`computeDeform`** — 휘어짐(deform) 처리.
+- **`stepFragments`** — 파편들의 시간 진행(중력·지면 충돌)을 한 스텝씩 진행하는 헬퍼.
+- **`FractureResult`** 자료형으로 결과를 일관되게 반환.
+
+### UI / 렌더 (renderer.js 371 → 536 줄)
+- **타깃 재질 선택** — `sel-target` 드롭다운 추가. 재질별 항복강도·밀도 차이가 충돌 결과에 반영.
+- **파괴율 시각화** — `#destr-level` / `#destr-fill` 진행 바로 파괴 진행도를 표시.
+- **시간 표시 ID 정리** — `t-display` → `t-disp` 로 변경.
+- **앱 타이틀 한글 복귀** — 이번 버전에서는 `<title>낙하 물리 시뮬레이터</title>` 로 표기. (다음 버전 6-22 에서 다시 영문 통일.)
+
+> C++ 코드 대규모 변경 — 빌드 시 반드시 **`npm run build-addon` 재실행**.

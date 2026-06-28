@@ -83,3 +83,15 @@ loader.load('./models/your-model.glb', (gltf) => {
   scene.add(gltf.scene);
 });
 ```
+
+---
+
+## 2026-6-20 변경 사항 (프로젝트 구조 정리)
+
+`2026-6-19` 기반. 빌드/배포 안정화를 위한 구조 변경.
+
+- **C++ 물리 코드를 `physics/` 서브폴더로 이동** — 루트에 흩어져 있던 `physics.h`, `physics.cpp`, `binding.cpp` 를 `physics/` 폴더로 묶음. `binding.gyp` 의 `sources` 경로를 그에 맞춰 갱신.
+- **`package-lock.json` 추가** — 빌드 재현성을 위한 의존성 잠금.
+- **Electron devDependency 버전 표기 갱신** (`^31.0.0` → `^42.4.1`).
+
+> C++ 코드 위치가 바뀌었으니 빌드 시 **`npm run build-addon` 재실행** 필요.
