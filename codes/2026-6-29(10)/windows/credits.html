@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+<title>Credits</title>
+<style>
+:root {
+  --bg: #0d1117; --panel: #161b22; --border: #21262d;
+  --blue: #58a6ff; --text: #c9d1d9; --muted: #6e7681;
+  --green: #3fb950; --yellow: #f0a500;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px; line-height: 1.7;
+  padding: 24px 28px; overflow-y: auto;
+}
+#content h1 { font-size: 18px; color: var(--blue); margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+#content h2 { font-size: 13px; color: var(--yellow); margin: 18px 0 6px; text-transform: uppercase; letter-spacing: .06em; }
+#content h3 { font-size: 12px; color: var(--green); margin: 12px 0 4px; }
+#content p  { color: var(--text); margin-bottom: 6px; }
+#content ul { list-style: none; padding: 0; margin-bottom: 6px; }
+#content ul li { color: var(--text); padding: 2px 0 2px 14px; position: relative; }
+#content ul li::before { content: '–'; position: absolute; left: 0; color: var(--muted); }
+#content a  { color: var(--blue); text-decoration: none; }
+#content a:hover { text-decoration: underline; }
+#content hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+#content strong { color: #fff; }
+.loading { color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="content"><span class="loading">불러오는 중…</span></div>
+<script>
+function parseMd(md) {
+  const lines = md.split('\n');
+  let html = '';
+  let inList = false;
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i]
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    if (line.startsWith('# '))       { if(inList){html+='</ul>';inList=false;} html += `<h1>${line.slice(2)}</h1>`; }
+    else if (line.startsWith('## ')){ if(inList){html+='</ul>';inList=false;} html += `<h2>${line.slice(3)}</h2>`; }
+    else if (line.startsWith('### ')){ if(inList){html+='</ul>';inList=false;} html += `<h3>${line.slice(4)}</h3>`; }
+    else if (line.startsWith('- ')) { if(!inList){html+='<ul>';inList=true;} html += `<li>${line.slice(2)}</li>`; }
+    else if (line.trim() === '---') { if(inList){html+='</ul>';inList=false;} html += '<hr>'; }
+    else if (line.trim() === '')    { if(inList){html+='</ul>';inList=false;} }
+    else                            { if(inList){html+='</ul>';inList=false;} html += `<p>${line}</p>`; }
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+
+window.creditsBridge.getCredits().then(text => {
+  document.getElementById('content').innerHTML = parseMd(text);
+}).catch(err => {
+  document.getElementById('content').innerHTML = `<p style="color:#f85149">credits.md를 불러오지 못했습니다: ${err.message}</p>`;
+});
+</script>
+</body>
+</html>
