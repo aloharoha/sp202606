@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';">
+<title>Settings</title>
+<style>
+  :root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--blue:#388bfd;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px;padding:18px;}
+  h1{font-size:18px;font-weight:600;text-align:left;color:var(--blue);text-transform:capitalize;
+    padding-bottom:12px;margin-bottom:16px;border-bottom:1px solid var(--border);}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:11px;color:var(--muted);margin-bottom:5px;letter-spacing:0.02em;}
+  .field input[type=number],.field input[type=text],.field select{
+    width:100%;background:var(--panel);border:1px solid var(--border);color:var(--text);
+    border-radius:6px;padding:7px 9px;font-size:13px;}
+  .field input[type=range]{width:100%;}
+  .row-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:14px;}
+  .row-toggle span{font-size:12px;}
+  .val{color:var(--blue);font-size:11px;}
+  .empty{color:var(--muted);font-size:12px;}
+  .note{margin-top:10px;color:var(--muted);font-size:11px;line-height:1.6;}
+</style>
+</head>
+<body>
+  <h1 id="title">Settings</h1>
+  <div id="fields"></div>
+  <div class="note" id="note"></div>
+  <script src="settings.js"></script>
+</body>
+</html>
