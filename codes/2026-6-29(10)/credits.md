@@ -32,8 +32,8 @@
 
 ## Special Thanks
 
-- 서예준
+- ???(적어야함)
 
 ---
 
-© 2026 sp202606
+© 2026 scienceproj
