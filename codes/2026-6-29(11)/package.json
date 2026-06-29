@@ -1,0 +1,37 @@
+{
+  "name": "physics-simulator",
+  "version": "1.0.0",
+  "description": "Terminal velocity & impact physics simulator",
+  "main": "main.js",
+  "scripts": {
+    "build-addon": "cmake-js compile",
+    "bundle": "node scripts/bundle.js",
+    "start": "node scripts/bundle.js && electron .",
+    "dist": "node scripts/bundle.js && electron-builder --win --x64"
+  },
+  "dependencies": {
+    "node-addon-api": "^7.0.0",
+    "three": "^0.165.0",
+    "jszip": "^3.10.1",
+    "firebase": "^10.12.0"
+  },
+  "devDependencies": {
+    "cmake-js": "^7.3.0",
+    "esbuild": "^0.21.0",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "cmake-js": {
+    "runtime": "electron",
+    "runtimeVersion": "31.0.0",
+    "arch": "x64"
+  },
+  "build": {
+    "appId": "com.physics.simulator",
+    "productName": "Physics Simulator",
+    "asar": false,
+    "win": { "target": "nsis" },
+    "files": ["**/*", "!node_modules/.cache", "!renderer.js"],
+    "extraResources": [{ "from": "build/Release/physics.node", "to": "physics.node" }]
+  }
+}
