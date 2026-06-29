@@ -1875,21 +1875,6 @@
   }
   async function exportXLSX(){
     if(!simResult)return;
-    // 각 그래프 탭을 캔버스에 그려 PNG로 캡처
-    const savedTab=activeTab;
-    const GRAPH_TABS=[
-      {id:'velocity', name:'Velocity'},
-      {id:'height',   name:'Altitude'},
-      {id:'acceleration', name:'Acceleration'},
-      {id:'density',  name:'Air Density'},
-    ];
-    const graphs=[];
-    for(const t of GRAPH_TABS){
-      drawGraph(t.id);
-      graphs.push({name:t.name, png:graphCanvas.toDataURL('image/png')});
-    }
-    drawGraph(savedTab); // 원래 탭 복원
-    // 데이터 준비
     const vt=simResult.terminalVelocity||0;
     const headers=['Time(s)','Altitude(m)','Velocity(m/s)','TerminalVel%',
       'Acceleration(m/s2)','AirDensity(kg/m3)','Atmosphere','DriftX(m)','DriftZ(m)'];
@@ -1905,7 +1890,7 @@
       if(features.heat){row.push(Math.round(f.T_surface||0), +((f.heatFlux||0)/1000).toFixed(2));}
       return row;
     });
-    const res=await window.appBridge.exportXlsx({headers,rows,graphs,filename:'sim-trajectory.xlsx'});
+    const res=await window.appBridge.exportXlsx({headers,rows,filename:'sim-trajectory.xlsx'});
     if(res&&!res.ok&&res.error)console.warn('[exportXLSX]',res.error);
   }
 

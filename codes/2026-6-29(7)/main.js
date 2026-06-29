@@ -310,41 +310,188 @@ ipcMain.handle('step-fragments', (_e, dt, gravity) => {
 // 업로드한 GLB/STL 파일을 앱의 assets 폴더로 복사한다.
 // 이렇게 하면 blob URL 대신 로컬 HTTP 서버에서 바로 서빙되어 로드 지연이 사라지고,
 // 다음 실행 때 프리셋처럼 재사용할 수도 있다. 반환값의 path 는 'assets/<파일명>'.
-ipcMain.handle('export-xlsx', async (_e, { headers, rows, graphs, filename }) => {
+// ── OOXML XLSX 빌더: 데이터 시트 + 네이티브 라인 차트 4개 ──
+function buildXlsxWithCharts(headers, rows) {
+    const JSZip = require('jszip');
+    const zip   = new JSZip();
+    const N     = rows.length;
+
+    // Excel 열 문자 변환 (0→A, 25→Z, 26→AA …)
+    const col = n => { let s=''; do { s=String.fromCharCode(65+n%26)+s; n=Math.floor(n/26)-1; } while(n>=0); return s; };
+    const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    // 차트 정의: 데이터 시트의 열 인덱스 참조
+    const CHARTS = [
+        { name:'Velocity',     colIdx:2, label:'Velocity (m/s)',        color:'4472C4' },
+        { name:'Altitude',     colIdx:1, label:'Altitude (m)',           color:'3FB950' },
+        { name:'Acceleration', colIdx:4, label:'Acceleration (m/s²)', color:'F85149' },
+        { name:'Air Density',  colIdx:5, label:'Air Density (kg/m³)', color:'D2A105' },
+    ];
+    const TOTAL = 1 + CHARTS.length; // 데이터 + 차트 시트
+
+    // ── [Content_Types].xml ──
+    const sheetCT = Array.from({length:TOTAL},(_,i)=>
+        `<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`
+    ).join('');
+    const chartCT = CHARTS.map((_,i)=>
+        `<Override PartName="/xl/charts/chart${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>` +
+        `<Override PartName="/xl/drawings/drawing${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>`
+    ).join('');
+    zip.file('[Content_Types].xml',
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+        `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+        `<Default Extension="xml" ContentType="application/xml"/>` +
+        `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+        `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+        sheetCT + chartCT + `</Types>`);
+
+    zip.file('_rels/.rels',
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>` +
+        `</Relationships>`);
+
+    // ── xl/workbook.xml ──
+    const sheetEls = [
+        `<sheet name="Trajectory Data" sheetId="1" r:id="rId1"/>`,
+        ...CHARTS.map((c,i)=>`<sheet name="${esc(c.name)}" sheetId="${i+2}" r:id="rId${i+2}"/>`)
+    ].join('');
+    zip.file('xl/workbook.xml',
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+        `<sheets>${sheetEls}</sheets></workbook>`);
+
+    zip.file('xl/_rels/workbook.xml.rels',
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+        Array.from({length:TOTAL},(_,i)=>
+            `<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`
+        ).join('') + `</Relationships>`);
+
+    zip.file('xl/styles.xml',
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+        `<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>` +
+        `<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>` +
+        `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
+        `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+        `<cellXfs count="2">` +
+        `<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>` +
+        `<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0"/>` +
+        `</cellXfs></styleSheet>`);
+
+    // ── xl/worksheets/sheet1.xml (Trajectory Data) ──
+    const colDefs = headers.map((h,i)=>{
+        const w = Math.min(Math.max(h.length, ...rows.map(r=>String(r[i]??'').length)) + 2, 50);
+        return `<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`;
+    }).join('');
+    const hdrRow = `<row r="1">${headers.map((h,i)=>`<c r="${col(i)}1" t="inlineStr" s="1"><is><t>${esc(h)}</t></is></c>`).join('')}</row>`;
+    const dataRowsXml = rows.map((row,ri)=>{
+        const cells = row.map((v,ci)=>{
+            const addr=`${col(ci)}${ri+2}`;
+            return typeof v==='string'
+                ? `<c r="${addr}" t="inlineStr"><is><t>${esc(v)}</t></is></c>`
+                : `<c r="${addr}"><v>${v}</v></c>`;
+        }).join('');
+        return `<row r="${ri+2}">${cells}</row>`;
+    }).join('');
+    zip.file('xl/worksheets/sheet1.xml',
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+        `<cols>${colDefs}</cols><sheetData>${hdrRow}${dataRowsXml}</sheetData></worksheet>`);
+
+    // ── 차트 시트 (sheet2–5) ──
+    CHARTS.forEach((cd, idx) => {
+        const si = idx + 2; // sheet index
+        const ci = idx + 1; // chart/drawing index
+        const DATA = "'Trajectory Data'";
+        const catRef = `${DATA}!$A$2:$A$${N+1}`;
+        const valRef = `${DATA}!$${col(cd.colIdx)}$2:$${col(cd.colIdx)}$${N+1}`;
+        const lblRef = `${DATA}!$${col(cd.colIdx)}$1`;
+
+        // 빈 시트 (데이터 없음 — 차트만 drawing으로 연결)
+        zip.file(`xl/worksheets/sheet${si}.xml`,
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+            `<sheetData/><drawing r:id="rId1"/></worksheet>`);
+
+        zip.file(`xl/worksheets/_rels/sheet${si}.xml.rels`,
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+            `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing${ci}.xml"/>` +
+            `</Relationships>`);
+
+        // Drawing: 절대 위치로 차트 크기 지정 (9144000×5486400 EMU = ~10"×6")
+        zip.file(`xl/drawings/drawing${ci}.xml`,
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+            `<xdr:absoluteAnchor>` +
+            `<xdr:pos x="0" y="0"/><xdr:ext cx="9144000" cy="5486400"/>` +
+            `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr>` +
+            `<xdr:cNvPr id="2" name="Chart ${ci}"/><xdr:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></xdr:cNvGraphicFramePr>` +
+            `</xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>` +
+            `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">` +
+            `<c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/>` +
+            `</a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:absoluteAnchor></xdr:wsDr>`);
+
+        zip.file(`xl/drawings/_rels/drawing${ci}.xml.rels`,
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+            `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${ci}.xml"/>` +
+            `</Relationships>`);
+
+        // 차트 XML (라인 차트)
+        zip.file(`xl/charts/chart${ci}.xml`,
+            `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+            `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+            `<c:roundedCorners val="0"/>` +
+            `<c:chart>` +
+            `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr b="1"/></a:pPr><a:r><a:t>${esc(cd.name)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>` +
+            `<c:autoTitleDeleted val="0"/>` +
+            `<c:plotArea>` +
+            `<c:lineChart>` +
+            `<c:grouping val="standard"/><c:varyColors val="0"/>` +
+            `<c:ser>` +
+            `<c:idx val="0"/><c:order val="0"/>` +
+            `<c:tx><c:strRef><c:f>${lblRef}</c:f></c:strRef></c:tx>` +
+            `<c:spPr><a:ln w="25400"><a:solidFill><a:srgbClr val="${cd.color}"/></a:solidFill></a:ln></c:spPr>` +
+            `<c:marker><c:symbol val="none"/></c:marker>` +
+            `<c:cat><c:numRef><c:f>${catRef}</c:f></c:numRef></c:cat>` +
+            `<c:val><c:numRef><c:f>${valRef}</c:f></c:numRef></c:val>` +
+            `<c:smooth val="0"/>` +
+            `</c:ser>` +
+            `<c:axId val="101"/><c:axId val="102"/>` +
+            `</c:lineChart>` +
+            `<c:catAx>` +
+            `<c:axId val="101"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/>` +
+            `<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Time (s)</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>` +
+            `<c:numFmt formatCode="0.00" sourceLinked="0"/><c:crossAx val="102"/><c:auto val="1"/>` +
+            `</c:catAx>` +
+            `<c:valAx>` +
+            `<c:axId val="102"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/>` +
+            `<c:title><c:tx><c:rich><a:bodyPr rot="-5400000" vert="horz"/><a:lstStyle/><a:p><a:r><a:t>${esc(cd.label)}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>` +
+            `<c:crossAx val="101"/>` +
+            `</c:valAx>` +
+            `</c:plotArea>` +
+            `<c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend>` +
+            `<c:plotVisOnly val="1"/>` +
+            `</c:chart>` +
+            `</c:chartSpace>`);
+    });
+
+    return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+}
+
+ipcMain.handle('export-xlsx', async (_e, { headers, rows, filename }) => {
     try {
-        const ExcelJS = require('exceljs');
-        const wb = new ExcelJS.Workbook();
-
-        // ── 시트 1: 궤적 데이터 ──
-        const dataSheet = wb.addWorksheet('Trajectory Data');
-        const headerRow = dataSheet.addRow(headers);
-        headerRow.font = { bold: true };
-        headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF21262D' } };
-        headerRow.font = { bold: true, color: { argb: 'FFE6EDF3' } };
-        rows.forEach(r => dataSheet.addRow(r));
-        // 열 너비: 헤더·데이터 중 가장 긴 문자열 + 여백
-        headers.forEach((h, i) => {
-            const maxLen = Math.max(h.length, ...rows.map(r => String(r[i] ?? '').length));
-            dataSheet.getColumn(i + 1).width = maxLen + 2;
-        });
-
-        // ── 시트 2~N: 그래프 이미지 (탭별) ──
-        for (const g of (graphs || [])) {
-            const sheet = wb.addWorksheet(g.name);
-            const base64 = g.png.replace(/^data:image\/png;base64,/, '');
-            const imgId = wb.addImage({ base64, extension: 'png' });
-            sheet.addImage(imgId, {
-                tl: { col: 0, row: 0 },
-                ext: { width: 900, height: 480 },
-            });
-        }
-
         const { canceled, filePath } = await dialog.showSaveDialog(mainWin, {
             defaultPath: filename || 'sim-trajectory.xlsx',
             filters: [{ name: 'Excel 파일', extensions: ['xlsx'] }],
         });
         if (canceled || !filePath) return { ok: false };
-        await wb.xlsx.writeFile(filePath);
+        const buf = await buildXlsxWithCharts(headers, rows);
+        fs.writeFileSync(filePath, buf);
         return { ok: true };
     } catch (e) {
         return { ok: false, error: e.message };
