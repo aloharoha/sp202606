@@ -1,11 +1,11 @@
 # Credits
 
-## Development
+## App Development
 
 - 서예준
 - 오로하
 
-## Web Development
+## Web & Bridge & server Development
 
 - 오로하
 
